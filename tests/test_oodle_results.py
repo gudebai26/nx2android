@@ -122,9 +122,9 @@ class OodleResults(unittest.TestCase):
     def test_failed_record_and_wrong_count_are_rejected(self):
         self.gfpak('a.gfpak', 1)
         self.results([b''])
-        with self.assertRaisesRegex(pipeline.BuildError, 'failed on /a.gfpak entry 0'): self.run_stage()
+        with self.assertRaisesRegex(pipeline.BuildError, '处理 /a.gfpak 的条目 0 失败'): self.run_stage()
         self.results([None, None])
-        with self.assertRaisesRegex(pipeline.BuildError, 'other entries'): self.run_stage()
+        with self.assertRaisesRegex(pipeline.BuildError, '条目数与请求不一致'): self.run_stage()
 
 
 if __name__ == '__main__': unittest.main()
