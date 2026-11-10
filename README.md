@@ -87,6 +87,17 @@ nx2android decrypts your game files with your `prod.keys` while it ports them, a
 
 Nintendo's takedown notices so far have gone to whoever hosts a project (13 Switch emulator repositories on GitHub in February 2026), not to players. Whether decrypting your own games for your own use is allowed depends on where you live.
 
+## Chinese interface (this fork)
+
+This repository is an unofficial fork of [shirai91/nx2android](https://github.com/shirai91/nx2android), forked at `e9bd2b7`, with these changes:
+
+- **Chinese interface throughout**: the desktop app's tabs, log, errors and command-line help; the on-device overlay (20x20 bitmap glyphs; `devtools/make_overlay_zh.py` regenerates `nxnative/dm/android/overlay_zh.h`), the save picker, and the phone-as-pad screen of `--external-display`.
+- **Push tab**: scans a folder for ports already built there (a `nx2a-data.json` beside its APK), lists them with whether the chosen device already has them, and pushes the chosen game to the chosen phone in one click. `porter library` is the same scan on the command line.
+- **TV (`--external-display`) fixes**: `javac` runs with `-encoding UTF-8` (Chinese literals on a Windows whose default charset is GBK), `d8` runs with `JAVA_HOME` set, and a JDK is found by `porter doctor`, the new `jdk` setting and the Port tab's TV checkbox.
+- `使用说明.md` (a Chinese quick start) ships in the release.
+
+本分支只做界面汉化与上述易用性改动，不含任何密钥或游戏文件；APK 与数据包从不随仓库分发，仍需自备 `prod.keys` 与你自己的游戏转储。许可证不变（MIT），第三方组件各自保留其许可证（`nxnative/dm/third_party/*/LICENSE`）。
+
 ## License
 
 MIT, as nxnative (see `nxnative/LICENSE`). Third-party code keeps its own license.
