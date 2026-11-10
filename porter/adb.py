@@ -10,7 +10,7 @@ class AdbError(Exception):
     pass
 
 
-NO_ADB = 'adb not found: install Android platform-tools (Download missing tools), or set its path with `porter config adb <path>`'
+NO_ADB = '未找到 adb：请安装 Android platform-tools（“下载缺失的工具”），或用 `porter config adb <路径>` 设置其路径'
 
 
 LONG_PATH = 240   # adb.exe is not long-path aware: it cannot open a file whose full path passes Windows' 260 characters (Viractal's Unity bundles in a deep game folder)
@@ -55,14 +55,14 @@ class Adb:
                 if r.returncode == 0 or not check: return r.stdout
                 err = (r.stderr.strip() or r.stdout.strip())[-400:]   # adb's reason is on stderr; stdout has the files that went
                 if a and a[0] == 'install': break   # an install failure is an answer, not a dropped link
-            except subprocess.TimeoutExpired: err = f'timed out after {timeout or self.timeout} s'
-            except OSError as e: raise AdbError(f'cannot run adb ({self.exe}): {e}') from e   # adb removed or moved: no retry brings it back
+            except subprocess.TimeoutExpired: err = f'超过 {timeout or self.timeout} 秒未响应'
+            except OSError as e: raise AdbError(f'无法运行 adb（{self.exe}）：{e}') from e   # adb removed or moved: no retry brings it back
             if attempt + 1 < retries:
-                self.log(f'adb {a[0]} failed ({err}), retry {attempt + 1}')
+                self.log(f'adb {a[0]} 失败（{err}），第 {attempt + 1} 次重试')
                 try: subprocess.run(self.cmd('wait-for-device'), timeout=300, env=self.env)
-                except subprocess.TimeoutExpired: raise AdbError(f'adb {a[0]} failed ({err}) and the device did not come back within 300 s') from None
+                except subprocess.TimeoutExpired: raise AdbError(f'adb {a[0]} 失败（{err}），且设备在 300 秒内没有恢复连接') from None
                 time.sleep(2)
-        raise AdbError(f'adb {a[0]}: {err}')
+        raise AdbError(f'adb {a[0]}：{err}')
 
     def shell(self, script, **kw): return self.run('shell', script, **kw)
 
@@ -70,8 +70,8 @@ class Adb:
     def devices(self):
         """[(serial, state, description)] of every device adb sees"""
         try: out = subprocess.run([self.exe, 'devices', '-l'], capture_output=True, text=True, errors='replace', timeout=30, env=self.env).stdout
-        except OSError as e: raise AdbError(f'cannot run adb ({self.exe}): {e}') from e
-        except subprocess.TimeoutExpired: raise AdbError('adb devices: timed out after 30 s') from None
+        except OSError as e: raise AdbError(f'无法运行 adb（{self.exe}）：{e}') from e
+        except subprocess.TimeoutExpired: raise AdbError('adb devices：30 秒后超时') from None
         rows = []
         for ln in out.splitlines()[1:]:
             parts = ln.split()
@@ -81,9 +81,9 @@ class Adb:
     def pick(self):   # the configured device, else the only one connected
         ready = [s for s, st, _ in self.devices() if st == 'device']
         if self.serial:
-            if self.serial not in ready: raise AdbError(f'device {self.serial} is not connected (connected: {", ".join(ready) or "none"})')
+            if self.serial not in ready: raise AdbError(f'设备 {self.serial} 未连接（已连接：{", ".join(ready) or "无"}）')
             return self.serial
-        if len(ready) != 1: raise AdbError('no device connected' if not ready else f'several devices connected ({", ".join(ready)}): choose one')
+        if len(ready) != 1: raise AdbError('未连接设备' if not ready else f'连接了多台设备（{", ".join(ready)}）：请指定一台')
         self.serial = ready[0]
         return self.serial
 
@@ -218,7 +218,7 @@ class Adb:
         lines = out.splitlines()
         if lines and lines[-1].strip() != 'rc=0':
             bad = [ln for ln in lines[:-1] if not ln.partition(' ')[0].isdigit()]
-            raise AdbError(f'listing {rdir} on the device failed ({lines[-1].strip() if lines[-1].startswith("rc=") else "no exit status"}): ' + ('; '.join(bad[-3:]) or 'no message'))
+            raise AdbError(f'列出设备上的 {rdir} 失败（{lines[-1].strip() if lines[-1].startswith("rc=") else "无退出状态"}）：' + ('; '.join(bad[-3:]) or '无返回信息'))
         have = {}
         for ln in lines[:-1]:
             sz, _, name = ln.partition(' ')
@@ -287,7 +287,7 @@ class Adb:
                 with short_paths([arc]) as (qa,):
                     self.run('push', '-Z', qa, f'{remote}/.dmpart.tar', timeout=max(self.timeout, 600))
                 out = self.shell(f'cd {q} && tar -xf .dmpart.tar 2>&1; rc=$?; rm -f .dmpart.tar; echo "rc=$rc"', timeout=max(self.timeout, 600))
-                if not out.rstrip().endswith('rc=0'): raise AdbError(f'unpacking an archive of {len(part)} files in {remote} failed: {out.strip()[-300:]}')
+                if not out.rstrip().endswith('rc=0'): raise AdbError(f'在 {remote} 解压含 {len(part)} 个文件的归档失败：{out.strip()[-300:]}')
                 done += size
                 if progress: progress(done, f'{len(part):,} files')
         return done

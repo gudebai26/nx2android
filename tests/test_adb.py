@@ -8,13 +8,13 @@ from porter.adb import Adb, AdbError   # noqa: E402
 
 class MissingAdb(unittest.TestCase):   # issue #109: a port without platform-tools ran a program named "None" and ended in FileNotFoundError
     def test_no_exe(self):
-        with self.assertRaisesRegex(AdbError, 'adb not found'): Adb(None)
+        with self.assertRaisesRegex(AdbError, '未找到 adb'): Adb(None)
 
     def test_exe_gone(self):   # a configured adb that is no longer there: an AdbError at once, no retries
         with tempfile.TemporaryDirectory() as t:
             adb = Adb(Path(t) / 'adb.exe', log=lambda s: self.fail(f'retried: {s}'))
             for f in (adb.devices, adb.pick, lambda: adb.shell('true')):
-                with self.assertRaisesRegex(AdbError, 'cannot run adb'): f()
+                with self.assertRaisesRegex(AdbError, '无法运行 adb'): f()
 
 
 class RemoteSizes(unittest.TestCase):
@@ -36,7 +36,7 @@ class RemoteSizes(unittest.TestCase):
     def test_find_error(self):   # a find that fails is an error, not a short listing
         with self.assertRaisesRegex(AdbError, 'Argument list too long'):
             self.FakeAdb('5 ./a\nfind: exec stat: Argument list too long\n7 ./d\nrc=1\n').remote_sizes('/sdcard/x')
-        with self.assertRaisesRegex(AdbError, 'no exit status'):   # cut short
+        with self.assertRaisesRegex(AdbError, '无退出状态'):   # cut short
             self.FakeAdb('5 a\n7 d\n').remote_sizes('/sdcard/x')
 
 
@@ -91,7 +91,7 @@ class PushTars(unittest.TestCase):
     def test_unpack_error(self):   # a tar that fails on the device is an error
         with tempfile.TemporaryDirectory() as t:
             p = Path(t) / 'data' / 'a'; p.parent.mkdir(); p.write_bytes(b'x')
-            with self.assertRaisesRegex(AdbError, 'unpacking'): self.FakeAdb(Path(t) / 'dev', 'tar: short read\nrc=1').push_tars(p.parent, '/sdcard/x', [('a', p, 1)])
+            with self.assertRaisesRegex(AdbError, '解压含'): self.FakeAdb(Path(t) / 'dev', 'tar: short read\nrc=1').push_tars(p.parent, '/sdcard/x', [('a', p, 1)])
 
 
 if __name__ == '__main__':

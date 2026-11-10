@@ -51,7 +51,7 @@ def build(dst, *, profile, version, display, patched, romfs, shaders, aoc=None, 
     if tmp.exists(): shutil.rmtree(tmp)
     tmp.mkdir(parents=True)
     n = b = 0
-    for what, src, sub in (('the rewritten modules', patched, 'mods'), ('the RomFS', romfs, 'RomFS'), ('the DLC', aoc, 'aoc'), ('the system data', sysdata, 'sysdata')):
+    for what, src, sub in (('重写后的模块', patched, 'mods'), ('RomFS', romfs, 'RomFS'), ('DLC', aoc, 'aoc'), ('系统数据', sysdata, 'sysdata')):
         if not src: continue
         if progress: progress(what)
         dn, db = link_tree(src, tmp / sub); n += dn; b += db

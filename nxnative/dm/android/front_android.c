@@ -629,8 +629,8 @@ static void sp_touch(AInputEvent *e, float W, float H) {   // a row is done when
     } else if (act == AMOTION_EVENT_ACTION_CANCEL) g_sp.ptr = -1;
 }
 static void sp_size(char *out, int cap, const dm_save_entry *s) {
-    if (s->bytes >= 1 << 20) snprintf(out, (size_t)cap, "%ld file%s, %.1f MB", s->files, s->files == 1 ? "" : "s", s->bytes / 1048576.0);
-    else snprintf(out, (size_t)cap, "%ld file%s, %lld KB", s->files, s->files == 1 ? "" : "s", (s->bytes + 1023) / 1024);
+    if (s->bytes >= 1 << 20) snprintf(out, (size_t)cap, "%ld 个文件，%.1f MB", s->files, s->bytes / 1048576.0);
+    else snprintf(out, (size_t)cap, "%ld 个文件，%lld KB", s->files, (s->bytes + 1023) / 1024);
 }
 #define SP_ROW(i, st, ...) do { rows[i].style = st; snprintf(rows[i].left, sizeof rows[i].left, __VA_ARGS__); } while (0)
 int dm_save_rows(ov_srow rows[OVM_ROWS]) {   // (gfx_vk_present.c ov_save_panel)
@@ -638,22 +638,22 @@ int dm_save_rows(ov_srow rows[OVM_ROWS]) {   // (gfx_vk_present.c ov_save_panel)
     memset(rows, 0, sizeof(ov_srow) * OVM_ROWS);
     pthread_mutex_lock(&g_sp_mu);
     if (g_sp.closing) {
-        SP_ROW(0, OVS_TITLE, "Importing the save"); SP_ROW(1, OVS_ITEM, "%s", g_sp.pick.name); sp_size(rows[1].right, sizeof rows[1].right, &g_sp.pick);
-        SP_ROW(2, OVS_NOTE, "The game closes now. Open it again:"); SP_ROW(3, OVS_NOTE, "the save is imported as it starts.");
+        SP_ROW(0, OVS_TITLE, "正在导入存档"); SP_ROW(1, OVS_ITEM, "%s", g_sp.pick.name); sp_size(rows[1].right, sizeof rows[1].right, &g_sp.pick);
+        SP_ROW(2, OVS_NOTE, "游戏即将关闭，请重新打开："); SP_ROW(3, OVS_NOTE, "启动时会导入这个存档。");
     } else if (g_sp.confirm) {
-        SP_ROW(0, OVS_TITLE, "Import this save?"); SP_ROW(1, OVS_ITEM, "%s", g_sp.pick.name); sp_size(rows[1].right, sizeof rows[1].right, &g_sp.pick);
-        SP_ROW(2, OVS_NOTE, "Your current save is exported first,"); SP_ROW(3, OVS_NOTE, "then the game closes: open it again.");
-        SP_ROW(OVM_ROWS - 2, OVS_BUTTON, "Import and close"); SP_ROW(OVM_ROWS - 1, OVS_BACK, "Cancel");
+        SP_ROW(0, OVS_TITLE, "导入这个存档？"); SP_ROW(1, OVS_ITEM, "%s", g_sp.pick.name); sp_size(rows[1].right, sizeof rows[1].right, &g_sp.pick);
+        SP_ROW(2, OVS_NOTE, "当前存档会先导出备份，"); SP_ROW(3, OVS_NOTE, "然后游戏关闭，请重新打开。");
+        SP_ROW(OVM_ROWS - 2, OVS_BUTTON, "导入并关闭"); SP_ROW(OVM_ROWS - 1, OVS_BACK, "取消");
     } else {
         int pages = (g_sp.n + SP_PER - 1) / SP_PER, k = sp_on_page();
-        SP_ROW(0, OVS_TITLE, "Import a save"); if (pages > 1) snprintf(rows[0].right, sizeof rows[0].right, "page %d of %d", g_sp.page + 1, pages);
+        SP_ROW(0, OVS_TITLE, "导入存档"); if (pages > 1) snprintf(rows[0].right, sizeof rows[0].right, "第 %d / %d 页", g_sp.page + 1, pages);
         for (int j = 0; j < k; j++) { const dm_save_entry *s = &g_sp.e[g_sp.page * SP_PER + j]; SP_ROW(1 + j, OVS_ITEM, "%s", s->name); sp_size(rows[1 + j].right, sizeof rows[1 + j].right, s); }
         if (!g_sp.n) {
             const char *d = strstr(dm_saves_dir(), "Android/data/");
-            SP_ROW(1, OVS_NOTE, "No saves yet. Export one, or put a save folder"); SP_ROW(2, OVS_NOTE, "(a console's, as its save tools copy it) in");
+            SP_ROW(1, OVS_NOTE, "还没有存档：先导出一次，或把"); SP_ROW(2, OVS_NOTE, "存档文件夹（主机存档亦可）放入");
             SP_ROW(3, OVS_NOTE, "%s", d ? d : dm_saves_dir());
         }
-        SP_ROW(OVM_ROWS - 1, OVS_BACK, "Back");
+        SP_ROW(OVM_ROWS - 1, OVS_BACK, "返回");
     }
     pthread_mutex_unlock(&g_sp_mu);
     return 1;

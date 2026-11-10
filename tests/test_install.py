@@ -110,7 +110,7 @@ class RomfsAt(unittest.TestCase):
         for bad in ('Games/romfs', '/data/local/tmp/romfs', ' /sdcard/x', '/sdcard/x\n', '/sdcard/Android/data/dev.eden.eden_emulator/files/romfs',
                     '/storage/emulated/0/android/OBB/x', '/sdcard/' + 'x' * 600):
             with self.assertRaises(BuildError, msg=bad): install.romfs_target(bad, FILES)
-        with self.assertRaisesRegex(BuildError, 'installer\'s own'): install.romfs_target(f'{FILES}/romfs2', FILES)
+        with self.assertRaisesRegex(BuildError, '安装程序自身管理'): install.romfs_target(f'{FILES}/romfs2', FILES)
 
     def test_env_row(self):   # the installer's row, last, read back from the device's env.txt; a hand-written DM_ROMFS is not the installer's
         env = install.env_with_romfs('# porter\nDM_LANG=en-US\n', DUMP)
@@ -122,9 +122,9 @@ class RomfsAt(unittest.TestCase):
     def test_mismatch(self):   # the first differences of each kind, with sizes; nothing for the same listing
         self.assertEqual(install.romfs_mismatch(DUMP, ROM, dict(ROM)), '')
         msg = install.romfs_mismatch(DUMP, ROM, {'Data/a.bin': 21, 'c.bin': 5, 'x.bin': 1, 'y.bin': 1}, n=1)
-        self.assertIn('1 of the game\'s files are not there (Data/sub/b.bin)', msg); self.assertIn('Data/a.bin: 21 bytes, the pack has 20', msg)
-        self.assertIn('2 are not the game\'s (x.bin, …)', msg)
-        self.assertIn('holds no files', install.romfs_mismatch(DUMP, ROM, {}))
+        self.assertIn('缺少游戏文件 1 个（Data/sub/b.bin）', msg); self.assertIn('Data/a.bin：21 字节，而数据包中为 20', msg)
+        self.assertIn('2 个文件不属于本游戏（x.bin, …）', msg)
+        self.assertIn('中没有任何文件', install.romfs_mismatch(DUMP, ROM, {}))
 
     def test_in_place(self):   # the folder matches: no RomFS pushed, access granted, env.txt with the row, the earlier copy in the files folder removed only after that
         dev = self.run_on(Device({**{f'{DUMP}/{r}': n for r, n in ROM.items()}, f'{FILES}/RomFS/Data/a.bin': 20, f'{FILES}/RomFS/old.bin': 3, f'{FILES}/log.txt': 9}), romfs_at=DUMP)
@@ -141,17 +141,17 @@ class RomfsAt(unittest.TestCase):
     def test_refused_before_anything(self):   # a folder that is not the pack's RomFS: refused before the APK goes in, with the first differences and what to do
         dev = Device({f'{DUMP}/Data/a.bin': 20, f'{DUMP}/c.bin': 6})
         with self.assertRaises(BuildError) as e: self.run_on(dev, romfs_at=DUMP)
-        for s in ('Data/sub/b.bin', 'c.bin: 6 bytes, the pack has 5', 'Test Game 1.1.0', '--romfs-push', '--romfs-at app'): self.assertIn(s, str(e.exception))
+        for s in ('Data/sub/b.bin', 'c.bin：6 字节，而数据包中为 5', 'Test Game 1.1.0', '--romfs-push', '--romfs-at app'): self.assertIn(s, str(e.exception))
         self.assertEqual([o for o in dev.ops if o[0] != 'shell'], [])
         dev = Device({**{f'{DUMP}/{r}': n for r, n in ROM.items()}, f'{DUMP}/other.bin': 1})   # files that are not the game's: refused with --romfs-push too, nothing deleted
-        with self.assertRaisesRegex(BuildError, 'never deletes'): self.run_on(dev, romfs_at=DUMP, romfs_push=True)
+        with self.assertRaisesRegex(BuildError, '从不删除'): self.run_on(dev, romfs_at=DUMP, romfs_push=True)
         self.assertIn(f'{DUMP}/other.bin', dev.fs); self.assertEqual(dev.step('install'), -1)
-        with self.assertRaisesRegex(BuildError, 'earlier nx2android'): apk_file(self.apk, access=False); self.run_on(Device({f'{DUMP}/{r}': n for r, n in ROM.items()}), romfs_at=DUMP)
+        with self.assertRaisesRegex(BuildError, '更早的 nx2android 版本生成'): apk_file(self.apk, access=False); self.run_on(Device({f'{DUMP}/{r}': n for r, n in ROM.items()}), romfs_at=DUMP)
 
     def test_access_refused(self):   # the device does not grant it: a clear error, and no data pushed
         dev = Device({f'{DUMP}/{r}': n for r, n in ROM.items()}, grants=False)
         with self.assertRaises(BuildError) as e: self.run_on(dev, romfs_at=DUMP)
-        self.assertIn('MANAGE_EXTERNAL_STORAGE): default', str(e.exception)); self.assertIn('Settings > Apps > Test Game > All files access', str(e.exception))
+        self.assertIn('MANAGE_EXTERNAL_STORAGE): default', str(e.exception)); self.assertIn('设置 > 应用 > Test Game > 所有文件访问权限', str(e.exception))
         self.assertEqual((dev.step('push_tree'), dev.step('push_file')), (-1, -1))
 
     def test_android_10(self):   # no All files access: READ_EXTERNAL_STORAGE through pm grant
@@ -160,7 +160,7 @@ class RomfsAt(unittest.TestCase):
 
     def test_carried_over_and_back(self):   # a later install checks the kept folder again; app moves the RomFS back into the files folder and drops the row
         env = {f'{FILES}/env.txt': install.env_with_romfs('DM_LANG=en-US\n', DUMP)}
-        with self.assertRaisesRegex(BuildError, 'earlier install\'s --romfs-at'): self.run_on(Device({f'{DUMP}/c.bin': 5}, text=env, access='allow'))
+        with self.assertRaisesRegex(BuildError, '此前一次 --romfs-at 安装'): self.run_on(Device({f'{DUMP}/c.bin': 5}, text=env, access='allow'))
         dev = self.run_on(Device({f'{DUMP}/c.bin': 5}, text=env, access='allow'), romfs_at='app')
         self.assertEqual({k[len(FILES) + 7:] for k in dev.fs if k.startswith(f'{FILES}/RomFS/')}, set(ROM)); self.assertIsNone(install.device_romfs(dev.text[f'{FILES}/env.txt']))
         self.assertEqual(dev.step('push_file', 'env.txt'), -1); self.assertIn(f'{DUMP}/c.bin', dev.fs)   # the folder is left as it is
@@ -168,12 +168,12 @@ class RomfsAt(unittest.TestCase):
     def test_romfs_push(self):   # --romfs-push: the missing files and those of another size go into the folder, then it is checked again
         dev = self.run_on(Device({f'{DUMP}/c.bin': 4}), romfs_at=DUMP, romfs_push=True)
         self.assertEqual(dev.remote_sizes(DUMP), ROM); self.assertNotEqual(dev.step('push_tree', DUMP), -1)
-        with self.assertRaisesRegex(BuildError, '--romfs-push needs --romfs-at'): self.run_on(Device(), romfs_push=True)
+        with self.assertRaisesRegex(BuildError, '--romfs-push 需要同时给出 --romfs-at'): self.run_on(Device(), romfs_push=True)
 
     def test_content(self):   # a folder of the right names and sizes but other bytes (another game version): refused, or pushed again with --romfs-push
         rom = {f'{DUMP}/{r}': n for r, n in ROM.items()}
         dev = Device(rom, md5={f'{DUMP}/c.bin': '0' * 32})
-        with self.assertRaisesRegex(BuildError, r'1 have the right size but other content \(MD5: c.bin\)'): self.run_on(dev, romfs_at=DUMP)
+        with self.assertRaisesRegex(BuildError, r'1 个文件大小相同但内容不同（MD5：c.bin）'): self.run_on(dev, romfs_at=DUMP)
         self.assertEqual(dev.step('install'), -1); self.assertNotEqual(dev.step('md5', DUMP), -1)
         dev = self.run_on(Device(rom, md5={f'{DUMP}/c.bin': '0' * 32}), romfs_at=DUMP, romfs_push=True)
         self.assertNotEqual(dev.step('push_tree', DUMP), -1); self.assertFalse(dev.md5)
@@ -192,10 +192,10 @@ class RomfsAt(unittest.TestCase):
     def test_update_grant_first(self):   # an update whose app asks for the access: a refused grant stops the install before the APK goes in
         rom = {f'{DUMP}/{r}': n for r, n in ROM.items()}
         dev = Device(rom, grants=False, installed=True)
-        with self.assertRaisesRegex(BuildError, 'did not grant it'): self.run_on(dev, romfs_at=DUMP)
+        with self.assertRaisesRegex(BuildError, '而设备未通过 adb 授予'): self.run_on(dev, romfs_at=DUMP)
         self.assertEqual(dev.step('install'), -1)
         dev = Device(rom, grants=False, installed=True, requests=False)   # an older APK that did not ask: refused after the APK, before any data
-        with self.assertRaisesRegex(BuildError, 'did not grant it'): self.run_on(dev, romfs_at=DUMP)
+        with self.assertRaisesRegex(BuildError, '而设备未通过 adb 授予'): self.run_on(dev, romfs_at=DUMP)
         self.assertNotEqual(dev.step('install'), -1); self.assertEqual((dev.step('push_tree'), dev.step('push_file')), (-1, -1))
         dev = self.run_on(Device(rom, installed=True), romfs_at=DUMP)   # granted before the APK
         self.assertLess(dev.step('shell', 'appops set'), dev.step('install'))
@@ -203,7 +203,7 @@ class RomfsAt(unittest.TestCase):
     def test_free_space(self):   # the RomFS in another folder needs no room in the files folder
         rom = sum(ROM.values())
         self.run_on(Device({f'{DUMP}/{r}': n for r, n in ROM.items()}, free=self.bytes - rom), romfs_at=DUMP)
-        with self.assertRaisesRegex(BuildError, 'GB more'): self.run_on(Device(free=self.bytes - rom))
+        with self.assertRaisesRegex(BuildError, '还需要'): self.run_on(Device(free=self.bytes - rom))
 
     def test_options(self):   # install and port --install take --romfs-at / --romfs-push; port without --install, or a folder the app cannot read, fails before any stage
         a = cli._parser().parse_args(['install', 'x-data', '--romfs-at', DUMP, '--romfs-push'])

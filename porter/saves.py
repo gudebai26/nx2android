@@ -27,10 +27,10 @@ def apps(adb):
 def pick_app(adb, package=''):
     have = apps(adb)
     if package:
-        if package not in have: raise BuildError(f'{package} is not installed on the device' + (f' (ported games there: {", ".join(have)})' if have else ''))
+        if package not in have: raise BuildError(f'{package} 未安装在设备上' + (f'（设备上已移植的游戏：{", ".join(have)}）' if have else ''))
         return package
     if len(have) == 1: return have[0]
-    raise BuildError('no ported game is installed on the device' if not have else f'several ported games are installed: choose one with --package ({", ".join(have)})')
+    raise BuildError('设备上没有已移植的游戏' if not have else f'设备上有多个已移植的游戏：请用 --package 指定一个（{", ".join(have)}）')
 
 
 def listing(adb, package):
@@ -61,35 +61,35 @@ def _request(adb, package, file, lines, timeout=60):
     while time.time() - t0 < timeout:
         kv = dict(ln.split('=', 1) for ln in adb.shell(f'cat {shlex.quote(root + "/result.txt")} 2>/dev/null; true', check=False).splitlines() if '=' in ln)
         if kv.get('request') == token:
-            if kv.get('result') != 'ok': raise BuildError(f'the app could not do it: {kv.get("error", "no reason given")}')
+            if kv.get('result') != 'ok': raise BuildError(f'应用无法完成该操作：{kv.get("error", "未给出原因")}')
             return kv
         time.sleep(0.5)
     adb.shell(f'am force-stop {package}; rm -f {shlex.quote(root + "/" + file)}', check=False)
-    raise BuildError(f'{package} did not answer within {timeout} s: an app ported before the save manager cannot export or import (port the game again), '
-                     f'else see its log, {datapack.files_folder(package)}/log.txt')
+    raise BuildError(f'{package} 在 {timeout} 秒内没有响应：在存档管理器之前移植的应用无法导出或导入存档（请重新移植），'
+                     f'否则请查看其日志 {datapack.files_folder(package)}/log.txt')
 
 
 def export(adb, package, dest, name=''):
     """A save folder from the device into dest/<name>/ (and <name>.device/): name, one already in saves/; none: a fresh export of the game's save. → the local folder"""
     root = saves_folder(package)
     if not name:
-        say(f'{package}: stopping the app and starting it to export its save (the game does not start)')
+        say(f'{package}：正在停止应用并重新启动以导出存档（游戏本身不会启动）')
         name = _request(adb, package, 'export.txt', ['export'])['name']
-        say(f'exported on the device as saves/{name}')
+        say(f'已在设备上导出为 saves/{name}')
     have = {r['name']: r for r in listing(adb, package)}
-    if name not in have: raise BuildError(f'no save folder {name} on the device (there: {", ".join(have) or "none"})')
+    if name not in have: raise BuildError(f'设备上没有存档文件夹 {name}（现有：{", ".join(have) or "无"}）')
     dest = Path(dest); dest.mkdir(parents=True, exist_ok=True)
     for sub in [name] + ([name + '.device'] if have[name]['device'] else []):
         local = dest / sub
-        if local.exists(): raise BuildError(f'{local} is already there: choose another folder')
+        if local.exists(): raise BuildError(f'{local} 已存在：请换一个文件夹')
         sizes = adb.remote_sizes(f'{root}/{sub}')
         local.mkdir()
         for rel in sorted(sizes):   # file by file: adb pull of a folder into one that exists puts it one level down, and empty folders matter to no save
             (local / rel).parent.mkdir(parents=True, exist_ok=True)
             adb.run('pull', f'{root}/{sub}/{rel}', local / rel, timeout=600)
-            if (local / rel).stat().st_size != sizes[rel]: raise BuildError(f'{rel}: {(local / rel).stat().st_size} bytes pulled, {sizes[rel]} on the device')
+            if (local / rel).stat().st_size != sizes[rel]: raise BuildError(f'{rel}：已取回 {(local / rel).stat().st_size} 字节，设备上为 {sizes[rel]} 字节')
     r = have[name]
-    say(f'{name}: {r["files"]} files, {r["bytes"]:,} bytes → {dest / name}' + (f' (and the device save, {dest / (name + ".device")})' if r['device'] else ''))
+    say(f'{name}：{r["files"]} 个文件，{r["bytes"]:,} 字节 → {dest / name}' + (f'（以及设备侧存档 {dest / (name + ".device")}）' if r['device'] else ''))
     return dest / name
 
 
@@ -97,10 +97,10 @@ def _unpacked(src, tmp):
     """A save folder from src: a folder as it is, or a .zip's contents (the one folder in it when it holds only that)"""
     src = Path(src)
     if src.is_dir(): return src
-    if src.suffix.lower() != '.zip' or not src.is_file(): raise BuildError(f'{src}: not a folder or a .zip')
+    if src.suffix.lower() != '.zip' or not src.is_file(): raise BuildError(f'{src}：不是文件夹，也不是 .zip')
     with zipfile.ZipFile(src) as z:
         for n in z.namelist():
-            if n.startswith(('/', '\\')) or '..' in Path(n).parts: raise BuildError(f'{src}: {n} points outside the archive')
+            if n.startswith(('/', '\\')) or '..' in Path(n).parts: raise BuildError(f'{src}：{n} 指向压缩包之外')
         z.extractall(tmp)
     top = [p for p in Path(tmp).iterdir() if p.name != '__MACOSX']
     return top[0] if len(top) == 1 and top[0].is_dir() else Path(tmp)
@@ -111,7 +111,7 @@ def import_(adb, package, src, name=''):
     with tempfile.TemporaryDirectory(prefix='nx2a_save_') as tmp:
         folder = _unpacked(src, tmp)
         files = [p for p in folder.rglob('*') if p.is_file()]
-        if not files: raise BuildError(f'{src}: no files in it')
+        if not files: raise BuildError(f'{src}：其中没有文件')
         device = Path(str(folder) + '.device') if Path(src).is_dir() else None
         name = name or (Path(src).stem if not Path(src).is_dir() else folder.name)
         name = re.sub(r'[^A-Za-z0-9._ +()-]', '_', name).lstrip('.').removesuffix('.device') or 'save'
@@ -120,19 +120,19 @@ def import_(adb, package, src, name=''):
         base, k = name, 2
         while name in taken: name, k = f'{base}-{k}', k + 1
         root = saves_folder(package)
-        say(f'pushing {len(files)} files ({sum(p.stat().st_size for p in files):,} bytes) to saves/{name}')
+        say(f'正在推送 {len(files)} 个文件（{sum(p.stat().st_size for p in files):,} 字节）到 saves/{name}')
         adb.push_tree(folder, f'{root}/.{name}.push')   # under a hidden name first: the app's picker never lists a folder half pushed
         if device and device.is_dir(): adb.push_tree(device, f'{root}/.{name}.push.device')
         q = lambda s: shlex.quote(f'{root}/{s}')
         adb.shell(f'mv {q("." + name + ".push")} {q(name)}' + (f' && mv {q("." + name + ".push.device")} {q(name + ".device")}' if device and device.is_dir() else ''))
-    say(f'{package}: stopping the app and starting it to import the save (it exports the save it replaces first, then ends)')
+    say(f'{package}：正在停止应用并重新启动以导入存档（会先导出将被替换的存档，然后退出）')
     kv = _request(adb, package, 'import.txt', [name])
-    say(f'imported {name} ({kv.get("files", "?")} files)' + (f'; the save it replaced is saves/{kv["backup"]} on the device' if kv.get('backup') else '') + ': open the game on the device')
+    say(f'已导入 {name}（{kv.get("files", "?")} 个文件）' + (f'；被替换的存档在设备上是 saves/{kv["backup"]}' if kv.get('backup') else '') + '：请在设备上打开游戏')
     return kv
 
 
 def connect(adb_exe, serial=''):
-    if not adb_exe: raise BuildError('adb not found: install Android platform-tools, or set its path with `porter config adb <path>`')
+    if not adb_exe: raise BuildError('未找到 adb：请安装 Android platform-tools，或用 `porter config adb <路径>` 设置其路径')
     adb = Adb(adb_exe, serial or None, log=say)
     try: adb.pick()
     except AdbError as e: raise BuildError(str(e)) from e

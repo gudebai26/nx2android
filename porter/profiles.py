@@ -36,5 +36,5 @@ def by_title(tid):
 def load(gid):
     """The Android profile of a game profile id (ProfileError when it has none)"""
     p = android_profile.load(gid)
-    if not p: raise android_profile.ProfileError(f'{gid} has no android.tsv: it is not ported to Android')
+    if not p: raise android_profile.ProfileError(f'{gid} 没有 android.tsv：尚未移植到 Android')
     return p

@@ -66,7 +66,7 @@ def _dotnet():
             for f in (sdk or {}).get('files', []):
                 if f.get('rid') == rid and f['name'] == f'dotnet-sdk-{rid}{kind}':
                     return Item('.NET SDK', sdk['version'], f['url'], 0, f['hash'], 'sha512', 'dotnet', LICENSES['.NET SDK'])
-    raise BuildError(f'no .NET SDK {toolchain.DOTNET_MAJOR} for {rid} in {DOTNET_INDEX}')
+    raise BuildError(f'{DOTNET_INDEX} 中没有适用于 {rid} 的 .NET SDK {toolchain.DOTNET_MAJOR}')
 
 
 def missing(cfg=None):
@@ -94,17 +94,17 @@ def _download(it, dest):   # to dest, counting bytes and hashing as it goes; a w
     h, part = hashlib.new(it.algo), dest.with_suffix(dest.suffix + '.part')
     with urllib.request.urlopen(urllib.request.Request(it.url, headers={'User-Agent': 'nx2android'}), timeout=120) as r, open(part, 'wb') as f:
         total, done = int(r.headers.get('Content-Length') or it.size or 0), 0
-        PROG.set(step='downloading', done=0, total=total or None, unit='B')
+        PROG.set(step='正在下载', done=0, total=total or None, unit='B')
         while chunk := r.read(1 << 20):
             f.write(chunk); h.update(chunk); done += len(chunk); PROG.set(done=done)
     if h.hexdigest().lower() != it.hash.lower():
-        part.unlink(missing_ok=True); raise BuildError(f'{it.url}: the download\'s {it.algo} is not the one its list gives (try again)')
+        part.unlink(missing_ok=True); raise BuildError(f'{it.url}：下载文件的 {it.algo} 与列表中的不一致（请重试）')
     part.replace(dest)
 
 
 def _unzip(arc, into):   # zipfile drops Unix modes and symlinks; the NDK and platform-tools need both outside Windows
     with zipfile.ZipFile(arc) as z:
-        infos = z.infolist(); PROG.set(step='unpacking', done=0, total=len(infos), unit='files')
+        infos = z.infolist(); PROG.set(step='正在解包', done=0, total=len(infos), unit='files')
         for i, info in enumerate(infos):
             mode = info.external_attr >> 16
             if os.name != 'nt' and stat.S_ISLNK(mode):
@@ -117,7 +117,7 @@ def _unzip(arc, into):   # zipfile drops Unix modes and symlinks; the NDK and pl
 
 def _untar(arc, into):
     with tarfile.open(arc) as t:
-        PROG.set(step='unpacking'); t.extractall(into, **({'filter': 'tar'} if hasattr(tarfile, 'tar_filter') else {}))   # the filter: Python 3.12+ (3.11.4)
+        PROG.set(step='正在解包'); t.extractall(into, **({'filter': 'tar'} if hasattr(tarfile, 'tar_filter') else {}))   # the filter: Python 3.12+ (3.11.4)
 
 
 def _install(it, arc):
@@ -141,7 +141,7 @@ def download(items):
     PROG.plan(len(items))
     keys = {'Android NDK': ('ndk', ''), '.NET SDK': ('dotnet', f'dotnet{toolchain.EXE}'), 'adb': ('adb', f'adb{toolchain.EXE}')}
     for it in items:
-        PROG.stage(f'{it.name} {it.version}', step='downloading')
+        PROG.stage(f'{it.name} {it.version}', step='正在下载')
         arc = root / Path(it.url).name
         try:
             _download(it, arc); dest = _install(it, arc)
@@ -151,4 +151,4 @@ def download(items):
         PROG.end(str(dest))
     PROG.close()
     bad = [n for n in missing() if n in {it.name for it in items}]
-    if bad: raise BuildError('downloaded, but the check still fails for: ' + ', '.join(bad) + ' (porter doctor says why)')
+    if bad: raise BuildError('已下载，但以下项目仍未通过检查：' + ', '.join(bad) + '（porter doctor 会说明原因）')

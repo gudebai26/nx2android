@@ -24,7 +24,7 @@ def zstd_mod():   # compression.zstd from Python 3.14, its backport before (pip 
     try: from compression import zstd
     except ImportError:
         try: from backports import zstd
-        except ImportError: raise BuildError('NSZ / XCZ dumps need zstd: Python 3.14, or pip install backports.zstd') from None
+        except ImportError: raise BuildError('NSZ / XCZ 转储需要 zstd：请使用 Python 3.14，或 pip install backports.zstd') from None
     return zstd
 
 
@@ -32,7 +32,7 @@ def aes_mod():
     try: from Crypto.Cipher import AES
     except ImportError:
         try: from Cryptodome.Cipher import AES   # what some system package managers call pycryptodome
-        except ImportError: raise BuildError('NSZ / XCZ dumps need AES: pip install pycryptodome (or decompress them to NSP / XCI first: nsz -D)') from None
+        except ImportError: raise BuildError('NSZ / XCZ 转储需要 AES：pip install pycryptodome（或先用 nsz -D 解压为 NSP / XCI）') from None
     return AES
 
 
@@ -41,16 +41,16 @@ def entries(path):
     with open(path, 'rb') as f:
         if f.read(4) == b'PFS0': return _fs(f, 0, 0x18)
         f.seek(0x100)
-        if f.read(4) != b'HEAD': raise BuildError(f'{Path(path).name} is neither an NSP (PFS0) nor an XCI (no card header)')
+        if f.read(4) != b'HEAD': raise BuildError(f'{Path(path).name} 既不是 NSP（PFS0），也不是 XCI（没有卡带头）')
         f.seek(0x130); root = struct.unpack('<Q', f.read(8))[0]
         sec = next((o for n, o, _ in _fs(f, root, 0x40) if n == 'secure'), None)
-        if sec is None: raise BuildError(f'no secure partition in {Path(path).name}')
+        if sec is None: raise BuildError(f'{Path(path).name} 中没有 secure 分区')
         return _fs(f, sec, 0x40)
 
 
 def _fs(f, at, esize):   # a PFS0 (entries of 0x18 bytes) or HFS0 (0x40) at offset at: its files with offsets in the file
     f.seek(at); magic, n, st = struct.unpack('<4sII4x', f.read(16))
-    if magic not in (b'PFS0', b'HFS0'): raise BuildError(f'no PFS0 / HFS0 at {at:#x} of {f.name}')
+    if magic not in (b'PFS0', b'HFS0'): raise BuildError(f'{f.name} 的偏移 {at:#x} 处没有 PFS0 / HFS0')
     ent, strs = f.read(n * esize), f.read(st)
     data = at + 16 + n * esize + st
     out = []
@@ -64,13 +64,13 @@ def _fs(f, at, esize):   # a PFS0 (entries of 0x18 bytes) or HFS0 (0x40) at offs
 def _ncz_head(f, at):   # an NCZ's sections [(offset, size, crypto type, key, counter)] and its block header (None: one zstd stream), f left after both
     f.seek(at + NCA_HEAD)
     magic, n = struct.unpack('<8sQ', f.read(16))
-    if magic != b'NCZSECTN': raise BuildError(f'not an NCZ (no NCZSECTN) at {at:#x} of {f.name}')
+    if magic != b'NCZSECTN': raise BuildError(f'{f.name} 的偏移 {at:#x} 处不是 NCZ（没有 NCZSECTN）')
     secs = [(o, s, c, k, ctr) for o, s, c, _, k, ctr in (struct.unpack('<QQQQ16s16s', f.read(0x40)) for _ in range(n))]
     if secs and secs[0][0] > NCA_HEAD: secs.insert(0, (NCA_HEAD, secs[0][0] - NCA_HEAD, 1, b'', b''))   # older compressors start the first section after the header: the gap is plain
     pos = f.tell(); block = None
     if f.read(8) == b'NCZBLOCK':
         ver, typ, _, exp, nb, size = struct.unpack('<BBBBIQ', f.read(16))
-        if not 14 <= exp <= 32: raise BuildError(f'a damaged NCZBLOCK header in {f.name} (block size 2^{exp})')
+        if not 14 <= exp <= 32: raise BuildError(f'{f.name} 中的 NCZBLOCK 头已损坏（块大小 2^{exp}）')
         block = (1 << exp, size, struct.unpack(f'<{nb}I', f.read(4 * nb)))
     else: f.seek(pos)
     return secs, block

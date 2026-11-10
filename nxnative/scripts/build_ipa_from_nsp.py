@@ -355,7 +355,7 @@ def build_nx_extract(repo, work, logs, env):
     nx = work / 'tools/nx_extract' / exe
     with tempfile.TemporaryDirectory(prefix='nx_extract_') as t:
         run(['dotnet', 'build', repo / 'dm/tools/nx_extract', '-c', 'Release', '-o', t, '-v', 'quiet', '-nologo'], logs / 'nx_extract_build.log', env=env)
-        if not (Path(t) / exe).exists(): raise BuildError(f'nx_extract built without an executable (see {logs / "nx_extract_build.log"})')
+        if not (Path(t) / exe).exists(): raise BuildError(f'nx_extract 构建完成但没有可执行文件（见 {logs / "nx_extract_build.log"}）')
         rmtree(nx.parent); shutil.copytree(t, nx.parent)
     return nx
 
@@ -791,19 +791,19 @@ def extracted(log):   # (files, bytes) from the summary lines nx_extract wrote t
 def extract(nx, keys, ex, name, base, upd, cmp_dir, logs, g):   # the build IDs are checked by the caller (build_mismatch)
     dst, marker, log = ex / name, g.get('romfs_marker'), logs / f'extract_{name}.log'
     if (dst / 'ExeFS' / 'main').exists() and (dst / 'RomFS' / marker).exists():
-        PROG.stage(f'extract {name}')
-        say(f'reusing the extracted {name}: {dst}')
-        PROG.end('reused')
+        PROG.stage(f'解压 {name}')
+        say(f'复用已解压的 {name}：{dst}')
+        PROG.end('已复用')
         return dst
     tmp = ex / (name + '.partial'); rmtree(tmp)
     last = extracted(log)   # the last extraction of this version (its log is about to be overwritten) has the exact size; without one, the NSPs' size is the estimate
     def poll():
-        n, b = tree_size(tmp); return {'done': b, 'note': f'{n:,} files'}
-    PROG.stage(f'extract {name}', poll=poll, unit='B', total=last[1] if last else base.stat().st_size + (upd.stat().st_size if upd else 0), est=not last)
+        n, b = tree_size(tmp); return {'done': b, 'note': f'{n:,} 个文件'}
+    PROG.stage(f'解压 {name}', poll=poll, unit='B', total=last[1] if last else base.stat().st_size + (upd.stat().st_size if upd else 0), est=not last)
     run([nx, keys, base, upd or '-', tmp] + ([cmp_dir] if cmp_dir else []) + (['--allow-damaged'] if ALLOW_DAMAGED else []), log)
     swap_in(tmp, dst)
     n, b = extracted(log) or (0, 0)
-    PROG.end(f'{n:,} files, {amount(b, "B")}')
+    PROG.end(f'{n:,} 个文件，{amount(b, "B")}')
     return dst
 
 
@@ -816,20 +816,20 @@ def extract_aoc(nx, keys, repo, work, app, fam, logs):
     for tid, ver, p in fam['dlc']:
         k = (ver or 0, p.stat().st_size)
         if tid not in best or k > best[tid][0]: best[tid] = (k, p)
-    PROG.stage('extract DLC')
+    PROG.stage('解压 DLC')
     kf = work / 'aoc.key'
     key = fingerprint(sorted((tid, p.name, p.stat().st_size, p.stat().st_mtime_ns) for tid, (_, p) in best.items()), ('files', [repo / 'dm/tools/nx_extract' / f for f in ('Program.cs', 'nx_extract.csproj')]))
     if dst.is_dir() and (note := reused(kf, key)) is not None:
-        PROG.end(f'{note}, reused (inputs unchanged)'); return dst
+        PROG.end(f'{note}，已复用（输入未变）'); return dst
     rmtree(kf)
     for i, (tid, (_, p)) in enumerate(sorted(best.items())):
         idx = tid - app - 0x1000
-        PROG.set(step='extracting', done=i, total=len(best), unit='DLC')
-        say(f'DLC index {idx}: {p.name}')
+        PROG.set(step='正在解压', done=i, total=len(best), unit='个 DLC')
+        say(f'DLC 序号 {idx}：{p.name}')
         run([nx, keys, '--aoc', p, tmp / str(idx)], logs / f'aoc_{idx}.log')
     swap_in(tmp, dst)
     kf.write_text(f'{key}\n{len(best)} DLC\n')
-    PROG.end(f'{len(best)} DLC')
+    PROG.end(f'{len(best)} 个 DLC')
     return dst
 
 
@@ -871,7 +871,7 @@ def rewrite(py, repo, exe_dir, out, env, logs, g):
     and the patch files of their builds), its switch and capstone are as at the last successful rewrite (Monster Hunter Rise's main alone takes 5.5 min)"""
     import capstone
     mods = g.words('modules')
-    PROG.stage('rewrite', step='checking the inputs')
+    PROG.stage('重写模块', step='正在检查输入')
     nro_dir = out.with_name('nro_' + out.name.removeprefix('patched_'))
     nros = collect_nros(py, repo, exe_dir.parent / 'RomFS', nro_dir, env, logs)
     manifest = nro_dir / 'nro.tsv'
@@ -882,10 +882,10 @@ def rewrite(py, repo, exe_dir, out, env, logs, g):
     key = fingerprint(('files', [repo / 'dm/tools' / f for f in ('patch_nso.py', 'nso_code.py', 'nso_asm.py')] + patch_files(repo, exe_dir, mods) + extra + list(src.values()) + ([manifest] if manifest.is_file() else [])), names, capstone.__version__,
                       {k: env.get(k) for k in ('DM_PATCH_FRONT',)})
     if all((out / f'{m}.patched.bin').is_file() for m in names) and reused(kf, key) is not None:
-        PROG.end(f'{", ".join(mods)}{f" and {len(nros)} NROs" if nros else ""}, reused (inputs unchanged)'); return
+        PROG.end(f'{", ".join(mods)}{f" 以及 {len(nros)} 个 NRO" if nros else ""}，已复用（输入未变）'); return
     tmp = out.with_name(out.name + '.partial'); rmtree(tmp); tmp.mkdir(parents=True); logs.mkdir(parents=True, exist_ok=True)
     if manifest.is_file(): shutil.copyfile(manifest, tmp / 'nro.tsv')   # refused-only manifests preserve the game's offline registration path too
-    PROG.set(step=', '.join(mods) + (f' and {len(nros)} NROs' if nros else ''), done=0, total=len(names), unit='modules')
+    PROG.set(step=', '.join(mods) + (f' 以及 {len(nros)} 个 NRO' if nros else ''), done=0, total=len(names), unit='个模块')
     procs, logf, todo, cores = {}, {}, list(names), max(2, os.cpu_count() or 4)
     try:
         while todo or procs:
@@ -897,8 +897,8 @@ def rewrite(py, repo, exe_dir, out, env, logs, g):
                 if p.returncode:
                     log = logs / f'rewrite_{m}.log'
                     PROG.end(ok=False)
-                    PROG.say(f'---- last lines of {log} ----\n' + ''.join(collections.deque(open(log, errors='replace'), maxlen=40)).rstrip('\n'))
-                    raise BuildError(f'patch_nso.py exit code {p.returncode} on {m} (full output: {log})')
+                    PROG.say(f'---- {log} 的最后几行 ----\n' + ''.join(collections.deque(open(log, errors='replace'), maxlen=40)).rstrip('\n'))
+                    raise BuildError(f'patch_nso.py 在 {m} 上以退出码 {p.returncode} 结束（完整输出：{log}）')
             time.sleep(0.2)
     finally:   # an error or an interrupt stops the other rewrites
         for p in procs.values():
@@ -1260,7 +1260,7 @@ def split_shaders(py, repo, roms, mains, pkg, env, logs, g, provisional=False, o
     oodle: for a game with Trinity packs (Pokémon Legends: Z-A; profile_guess.py shader_sources), a function that builds the Mac host and returns the split's DM_OODLE_HOST / DM_OODLE_MODULES; called only when the split runs
     aoc: the extracted DLC (extract_aoc), scanned too (DM_SPLIT_AOC): Xenoblade Chronicles 3's DLC archives hold shaders of their own"""
     names = ('shader_map.tsv', 'shader_facts.tsv', 'shader_pairs.tsv')
-    PROG.stage('shader split', step='checking the inputs')   # then a spinner: shader_split.py writes the package and the tables only at the end
+    PROG.stage('着色器拆分', step='正在检查输入')   # then a spinner: shader_split.py writes the package and the tables only at the end
     kf = pkg.with_name(pkg.name + '.key')
     key = None if provisional or ALLOW_DAMAGED else fingerprint(('files', tool_files(repo)), ('files', profile_files(g)),
         *[x for r, m in zip(roms, mains) for x in (('files', [m]), ('tree', r), ('files', sorted((r.parent / 'glslc_capture').glob('*.glslc'))),
@@ -1268,22 +1268,22 @@ def split_shaders(py, repo, roms, mains, pkg, env, logs, g, provisional=False, o
     if key and pkg.is_dir() and (note := reused(kf, key)) is not None:
         PROG.end(f'{note}, reused (inputs unchanged)'); return package_key(pkg)
     if oodle:   # the packs are decoded by the game's own Oodle in the Mac host (dm/host/hle_oodle.c)
-        PROG.set(step="setting up the game's Oodle decoder"); env = dict(env, **oodle())
+        PROG.set(step='正在准备游戏自带的 Oodle 解码器'); env = dict(env, **oodle())
     if aoc: env = dict(env, DM_SPLIT_AOC=str(aoc))
-    PROG.set(step='splitting')
+    PROG.set(step='正在拆分')
     tmp = pkg.with_name(pkg.name + '.partial'); rmtree(tmp); (tmp / 'tables').mkdir(parents=True)
     run([py, repo / 'dm/gfx/tools/shader_split.py', ','.join(map(str, roms)), ','.join(map(str, mains)), tmp / 'pkg'] + [tmp / 'tables' / n for n in names], logs / 'shader_split.log', env=env)
     m = re.search(r'shaders: (\d+) \(', (logs / 'shader_split.log').read_text(errors='replace'))
     if m and m.group(1) == '0':   # dmsh_build.py would make no library, and the iOS shader step stop with no word of why
-        raise BuildError('the shader split found no shaders in main or the RomFS: the game keeps them in a form shader_split.py does not read; locate them (docs/agents) and add a reader')
+        raise BuildError('着色器拆分在 main 与 RomFS 中都没有找到着色器：游戏以 shader_split.py 无法读取的形式保存它们；请先定位（见 docs/agents），再为其添加读取器')
     if provisional:   # a provisional profile takes the tables as they come
         for n in names: shutil.copyfile(tmp / 'tables' / n, g.table(n))
     else:
         # Data rows byte-identical to the profile's = the same game files the tables were built from; if not, stop (the profile's tables are left alone). Only data rows are compared: the header of Engage's profile tables was written by an older shader_split
         diff = [n for n in names if data_rows((tmp / 'tables' / n).read_bytes()) != data_rows(g.table(n).read_bytes())]
-        if diff: raise BuildError(f'the split shader tables differ from game profile {g.id}\'s: {", ".join(diff)} (game files not the versions the profile registers?)')
+        if diff: raise BuildError(f'拆分得到的着色器表与游戏配置 {g.id} 的不一致：{", ".join(diff)}（游戏文件不是该配置登记的版本？）')
     rmtree(kf); swap_in(tmp / 'pkg', pkg); rmtree(tmp)
-    note = f'{int(m.group(1)):,} shaders' if m else ''
+    note = f'{int(m.group(1)):,} 个着色器' if m else ''
     if key: kf.write_text(f'{key}\n{note}\n')
     PROG.end(note)
     return key and package_key(pkg)
@@ -1664,7 +1664,7 @@ def main(args=None):
     if free_gb(work) < gb and not all((ex / v).exists() for v in versions): raise BuildError(f'less than {gb:.0f} GB free on the volume of {work}')
     heapck = provisional and HEAP_CHECK and not args.no_heap_check and not heap_checked(g)   # the heap check, when the game needs one (once per provisional profile: it stamps the profile)
     PROG.plan(1 + len(versions) + bool(fam['dlc']) + 4 - (prepare_xcode or mac))   # prepare Xcode (a Mac-only build: the Mac host) replaces app build + IPA pack with one stage
-    PROG.stage('build nx_extract')
+    PROG.stage('构建 nx_extract')
     nx = build_nx_extract(repo, work, logs, env)
     PROG.end()
     dirs, clone = {}, None

@@ -27,27 +27,27 @@ def env_with_driver(text, lib):
 
 def installed_apk(adb, package):   # the installed APK's path on the device (ports are one APK, no splits)
     rows = [ln[len('package:'):].strip() for ln in adb.shell(f'pm path {shlex.quote(package)}', check=False).splitlines() if ln.startswith('package:')]
-    if not rows: raise BuildError(f'{package} is not installed on the device')
+    if not rows: raise BuildError(f'{package} 未安装在设备上')
     return rows[0]
 
 
 def swap(adb, package, driver=None):
     """package's APK again with driver (a .so path), or with the device's own driver when None; env.txt names it. → {'package', 'driver', 'dropped'}"""
-    if driver and not Path(driver).is_file(): raise BuildError(f'{driver}: no such driver library')
+    if driver and not Path(driver).is_file(): raise BuildError(f'{driver}：没有这个驱动库')
     with tempfile.TemporaryDirectory(prefix='nx2a_driver_') as t:
         src, out = Path(t) / 'installed.apk', Path(t) / 'driver.apk'
-        say(f'{package}: pulling the installed APK')
+        say(f'{package}：正在取回设备上已安装的 APK')
         adb.run('pull', installed_apk(adb, package), src, timeout=600)
         r = subprocess.run([sys.executable, str(DM / 'android/apk/apkdriver.py'), str(src), str(out), str(paths.signing_key())]
                            + (['--driver', str(driver)] if driver else ['--system']), capture_output=True, text=True, errors='replace')
         if r.returncode: raise BuildError((r.stderr.strip() or r.stdout.strip()).splitlines()[-1])
         res = json.loads(r.stdout.strip().splitlines()[-1])
         adb.shell(f'am force-stop {shlex.quote(package)}', check=False)
-        say(f'{package}: installing the APK with ' + (f'{res["driver"]}' if res['driver'] else 'no driver library (the device\'s driver)'))
+        say(f'{package}：正在安装 APK，驱动为 ' + (f'{res["driver"]}' if res['driver'] else '设备自带（无驱动库）'))
         try: adb.install(out, package)
         except AdbError as e: raise BuildError(str(e)) from e
         env = f'{datapack.files_folder(package)}/env.txt'
         new = Path(t) / 'env.txt'; new.write_text(env_with_driver(adb.read_text(env), res['driver']), encoding='utf-8', newline='\n')
         adb.run('push', new, env)
-    say(f'{package}: ' + (f'{ROW}={res["driver"]}' if res['driver'] else f'no {ROW} row: the device\'s driver') + ' (dropped: ' + (', '.join(res['dropped']) or 'none') + ')')
+    say(f'{package}：' + (f'{ROW}={res["driver"]}' if res['driver'] else f'无 {ROW} 行：使用设备自带驱动') + '（移除的驱动：' + (', '.join(res['dropped']) or '无') + '）')
     return dict(res, package=package)
