@@ -91,6 +91,23 @@ def find_adb(cfg=None):
     return None
 
 
+def find_jdk(cfg=None):
+    """The JDK whose javac compiles the external-screen activity (--external-display, the phone as the pad of a TV): the configured one, JAVA_HOME, a javac on
+    PATH, a JDK unpacked beside the NDK, or an installer's folder under Program Files. None without one: only that build needs a JDK"""
+    cfg = cfg if cfg is not None else config.load()
+    javac = shutil.which('javac')
+    cands = [cfg.get('jdk'), os.environ.get('JAVA_HOME'), str(Path(javac).resolve().parent.parent) if javac else None,
+             str(LOCAL_TOOLS / 'jdk'), str(player_tools() / 'jdk')]
+    if os.name == 'nt':
+        progs = [os.environ.get(k) for k in ('ProgramFiles', 'ProgramW6432')]
+        cands += [str(d) for p in progs if p for d in sorted(Path(p).glob('jdk*'))]   # jdk-17, jdk-21…
+        ndk, _rev = find_ndk(cfg)
+        if ndk: cands += [str(d) for d in sorted(ndk.parent.glob('jdk*'))]   # unpacked beside the NDK (the player's tools folder, another drive)
+    for c in cands:
+        if c and (Path(c) / 'bin' / f'javac{EXE}').is_file(): return Path(c)
+    return None
+
+
 def _importable(m):
     try: return importlib.util.find_spec(m) is not None
     except (ImportError, ValueError): return False
@@ -101,33 +118,36 @@ def checks(cfg=None, keys=None):
     cfg = cfg if cfg is not None else config.load()
     out = []
     v = sys.version_info
-    out.append(Check('Python', v >= (3, 11), f'{v.major}.{v.minor}.{v.micro} ({sys.executable})', fix='Python 3.11 or later'))
+    out.append(Check('Python', v >= (3, 11), f'{v.major}.{v.minor}.{v.micro}（{sys.executable}）', fix='需要 Python 3.11 或更高版本'))
     miss = [pip for m, pip in PY_MODULES.items() if not _importable(m)]
     if not (_importable('compression.zstd') or _importable('backports.zstd')): miss.append('backports.zstd')   # zstd: in the standard library from Python 3.14
-    out.append(Check('Python modules', not miss, 'missing: ' + ', '.join(miss) if miss else 'lz4, capstone, zstd', fix='pip install ' + ' '.join(miss) if miss else ''))
-    out.append(Check('Pillow', _importable('PIL'), 'the app icon from the game\'s icon' if _importable('PIL') else 'missing: the app gets no icon', required=False, fix='pip install pillow'))
+    out.append(Check('Python 模块', not miss, '缺少：' + ', '.join(miss) if miss else 'lz4, capstone, zstd', fix='pip install ' + ' '.join(miss) if miss else ''))
+    out.append(Check('Pillow', _importable('PIL'), '用游戏的图标生成应用图标' if _importable('PIL') else '缺少：应用将没有图标', required=False, fix='pip install pillow'))
     aes = _importable('Crypto.Cipher') or _importable('Cryptodome.Cipher')
-    out.append(Check('pycryptodome', aes, 'NSZ / XCZ dumps (porter.dumps)' if aes else 'missing: NSZ / XCZ dumps must be decompressed to NSP / XCI first', required=False, fix='' if aes else 'pip install pycryptodome'))
-    out.append(Check('fontTools', _importable('fontTools'), 'the button icons in game text' if _importable('fontTools') else 'missing: button icons in game text draw as "?"', required=False, fix='pip install fonttools'))
+    out.append(Check('pycryptodome', aes, 'NSZ / XCZ 转储（porter.dumps）' if aes else '缺少：NSZ / XCZ 转储必须先解压为 NSP / XCI', required=False, fix='' if aes else 'pip install pycryptodome'))
+    out.append(Check('fontTools', _importable('fontTools'), '游戏文本中的按键图标' if _importable('fontTools') else '缺少：游戏文本中的按键图标会显示为“?”', required=False, fix='pip install fonttools'))
     ndk, rev = find_ndk(cfg)
-    if not ndk: out.append(Check('Android NDK', False, 'not found', fix=f'Download missing tools, or install NDK {NDK_RELEASE} (developer.android.com/ndk/downloads) and set its folder'))
-    else: out.append(Check('Android NDK', rev == NDK_REVISION, f'{rev} at {ndk}' + ('' if rev == NDK_REVISION else f': the host is built with {NDK_RELEASE} ({NDK_REVISION}); others are untested'),
-                           required=rev.split('.')[0] == NDK_REVISION.split('.')[0], path=str(ndk), fix='' if rev == NDK_REVISION else f'install NDK {NDK_RELEASE}'))
+    if not ndk: out.append(Check('Android NDK', False, '未找到', fix=f'点击“下载缺失的工具”，或安装 NDK {NDK_RELEASE}（developer.android.com/ndk/downloads）并设置其文件夹'))
+    else: out.append(Check('Android NDK', rev == NDK_REVISION, f'{rev}，位于 {ndk}' + ('' if rev == NDK_REVISION else f'：宿主库是用 {NDK_RELEASE}（{NDK_REVISION}）构建的，其他版本未测试'),
+                           required=rev.split('.')[0] == NDK_REVISION.split('.')[0], path=str(ndk), fix='' if rev == NDK_REVISION else f'请安装 NDK {NDK_RELEASE}'))
     dn = find_dotnet(cfg)
     sdks = dotnet_sdks(dn) if dn else []
     good = [s for s in sdks if int(s.split('.')[0]) >= DOTNET_MAJOR]
-    out.append(Check('.NET SDK', bool(good), (f'{", ".join(sdks) or "no SDK"} ({dn})' if dn else 'dotnet not found'), path=str(dn or ''), fix='' if good else f'Download missing tools, or install the .NET SDK {DOTNET_MAJOR} (dotnet.microsoft.com)'))
+    out.append(Check('.NET SDK', bool(good), (f'{", ".join(sdks) or "无 SDK"}（{dn}）' if dn else '未找到 dotnet'), path=str(dn or ''), fix='' if good else f'点击“下载缺失的工具”，或安装 .NET SDK {DOTNET_MAJOR}（dotnet.microsoft.com）'))
     adb = find_adb(cfg)
-    out.append(Check('adb', bool(adb), str(adb) if adb else 'not found: the tool cannot install on a device (the APK and data pack are still made)', required=False, path=str(adb or ''),
-                     fix='' if adb else 'Download missing tools, or install Android platform-tools'))
+    out.append(Check('adb', bool(adb), str(adb) if adb else '未找到：工具无法安装到设备（仍会生成 APK 与数据包）', required=False, path=str(adb or ''),
+                     fix='' if adb else '点击“下载缺失的工具”，或安装 Android platform-tools'))
+    jdk = find_jdk(cfg)
+    out.append(Check('JDK（外接屏）', bool(jdk), str(jdk) if jdk else '未找到：接电视的 --external-display 需要 javac', required=False, path=str(jdk or ''),
+                     fix='' if jdk else '安装 JDK 17（adoptium.net），或 porter config jdk <JDK 文件夹>'))
     k = keys or cfg.get('keys')
-    out.append(Check('prod.keys', bool(k) and Path(k).is_file(), k if k and Path(k).is_file() else (f'no such file: {k}' if k else 'not set'), path=k or '',
-                     fix='' if k and Path(k).is_file() else 'dump prod.keys from your own Switch and set its path'))
+    out.append(Check('prod.keys', bool(k) and Path(k).is_file(), k if k and Path(k).is_file() else (f'文件不存在：{k}' if k else '未设置'), path=k or '',
+                     fix='' if k and Path(k).is_file() else '请从你自己的 Switch 中导出 prod.keys 并设置其路径'))
     where = Path(cfg.get('out') or Path.home())   # the output folder's drive, or the home folder's (a port's build folder goes beside the game files: the port checks that drive itself)
     where = next((p for p in (where, *where.parents) if p.exists()), Path.home())
     free = shutil.disk_usage(where).free / 2**30
-    out.append(Check('Disk space', free >= DISK_GB, f'{free:.0f} GB free on {where.anchor}', required=False,
-                     fix='' if free >= DISK_GB else f'a port takes about twice its game files on the game folder\'s drive (NEO: 7 GB); keep {DISK_GB} GB free'))
+    out.append(Check('磁盘空间', free >= DISK_GB, f'{where.anchor} 上可用 {free:.0f} GB', required=False,
+                     fix='' if free >= DISK_GB else f'一次移植约占游戏文件的两倍空间（NEO 为 7 GB）；请保持 {DISK_GB} GB 以上可用空间'))
     return out
 
 
@@ -135,6 +155,6 @@ def require(cfg=None, keys=None, adb=False):
     """The checked tools for a port: {'ndk', 'dotnet', 'adb'}; ToolError naming every missing requirement"""
     rows = checks(cfg, keys)
     bad = [r for r in rows if not r.ok and (r.required or (adb and r.name == 'adb'))]
-    if bad: raise ToolError('missing requirements: ' + '; '.join(f'{r.name}: {r.detail}' + (f' ({r.fix})' if r.fix else '') for r in bad))
+    if bad: raise ToolError('缺少依赖：' + '；'.join(f'{r.name}：{r.detail}' + (f'（{r.fix}）' if r.fix else '') for r in bad))
     by = {r.name: r for r in rows}
     return {'ndk': Path(by['Android NDK'].path), 'dotnet': Path(by['.NET SDK'].path), 'adb': Path(by['adb'].path) if by['adb'].ok else None}

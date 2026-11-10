@@ -1,14 +1,36 @@
 """The external controller consumes the native overlay's real atlas manifest."""
+import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+
+def jdk_bin():
+    """The JDK's bin (javac, java): the tool's own search, else where an installer puts one (a test run isolates the config, so a saved jdk
+    path is not seen); None without a JDK"""
+    from porter import toolchain
+    jdk = toolchain.find_jdk()
+    if jdk: return jdk / 'bin'
+    for r in (os.environ.get('ProgramFiles'), os.environ.get('ProgramW6432'), 'C:/Program Files', 'D:/Program Files'):
+        if not r: continue
+        for d in sorted(Path(r).glob('jdk*')):
+            if (d / 'bin' / ('javac.exe' if os.name == 'nt' else 'javac')).is_file(): return d / 'bin'
+    return None
+
+
+def exe(bin_, name):
+    return str(bin_ / (name + ('.exe' if os.name == 'nt' else '')))
 
 
 class ExternalOverlayThemeTest(unittest.TestCase):
     def test_both_layouts_and_invalid_manifest(self):
+        bin_ = jdk_bin()
+        if not bin_: self.skipTest('需要 JDK（javac / java）')
         with tempfile.TemporaryDirectory() as t:
             root = Path(t)
             check = root / 'org/nx2a/Check.java'
@@ -33,8 +55,8 @@ public class Check {
 }''')
             source = ROOT / 'nxnative/dm/android/java/org/nx2a/OverlayTheme.java'
             manifest = ROOT / 'nxnative/dm/android/themes/ergo/theme.tsv'
-            subprocess.run(['javac', '-d', t, str(source), str(check)], check=True)
-            subprocess.run(['java', '-cp', t, 'org.nx2a.Check', str(manifest)], check=True)
+            subprocess.run([exe(bin_, 'javac'), '-d', t, str(source), str(check)], check=True)
+            subprocess.run([exe(bin_, 'java'), '-cp', t, 'org.nx2a.Check', str(manifest)], check=True)
 
 
 if __name__ == '__main__':

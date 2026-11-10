@@ -77,16 +77,16 @@ def version_code(ver, offset=0):
     """The APK's versionCode: the Switch version number (v196608 → 196609), so an update of the game installs over the base game's port. Android installs an APK over one
     with the same versionCode, never over a higher one (INSTALL_FAILED_VERSION_DOWNGRADE): offset (porter port --vercode-offset) lifts a rebuild above a build already on
     the device (an earlier rebuild with an offset, a port of a later version) and keeps its saves, where an uninstall deletes them"""
-    if not 0 <= offset <= VERCODE_OFFSET_MAX: raise BuildError(f'the versionCode offset must be 0 to {VERCODE_OFFSET_MAX} (the next game version\'s port must stay above it): {offset}')
+    if not 0 <= offset <= VERCODE_OFFSET_MAX: raise BuildError(f'versionCode 偏移必须为 0 到 {VERCODE_OFFSET_MAX}（必须低于下一个游戏版本的移植包）：{offset}')
     return nsp.vnum(ver) + 1 + offset
 
 
 ALIAS_HEADROOM, ALIAS_HEADROOM_MAX = 8 << 30, 48   # the automatic headroom (bytes); the most --alias-headroom takes (GB: a 64 GB block with Engage's 5 GB layout)
 def alias_headroom_gb(gb):   # --alias-headroom checked: None (automatic) or 0 .. ALIAS_HEADROOM_MAX GB
-    if gb is not None and not 0 <= gb <= ALIAS_HEADROOM_MAX: raise BuildError(f'--alias-headroom {gb}: give 0 to {ALIAS_HEADROOM_MAX} GB')
+    if gb is not None and not 0 <= gb <= ALIAS_HEADROOM_MAX: raise BuildError(f'--alias-headroom {gb}：请给出 0 到 {ALIAS_HEADROOM_MAX} GB')
     return gb
-ALIAS_HINT = ('if it still crashes after "[RED] [mem] AllocateAddressRegion … refused" (0x1803), port again with a larger --alias-headroom '
-              '(the Port tab\'s Extra address space)')
+ALIAS_HINT = ('若在“[RED] [mem] AllocateAddressRegion … refused”(0x1803) 之后仍然崩溃，请用更大的 --alias-headroom 重新移植'
+              '（即“移植”标签页的“额外地址空间”）')
 
 
 def alias_headroom(tsv, gb=None):
@@ -150,7 +150,7 @@ def inspect(folder, keys=None):
                 compressed=[p.name for p in files if dumps.compressed(p)])   # NSZ / XCZ: decompressed during the port into the build folder's tmp/, deleted once extracted
     info['experimental'] = not (g and ap)   # a port can still be tried: porter port --experimental
     if not g:
-        info['reason'] = f'no game profile for {app:016X}: this game is not supported yet (an experimental port surveys it and guesses a profile; it may not start)'
+        info['reason'] = f'没有 {app:016X} 的游戏配置文件：该游戏暂不支持（实验性移植会扫描文件并推测配置，可能无法启动）'
         return info
     builds = g.builds()
     have = nsp.nsp_versions(fam, builds)
@@ -158,12 +158,12 @@ def inspect(folder, keys=None):
     info.update(profile=g.id, name=g.get('name', g.id), versions=sorted(have, key=nsp.vnum), pack=pack,
                 registered={v: b.get('display', '') for v, b in builds.items()}, derived=pack not in builds)
     if not ap:
-        info['reason'] = f'{g.get("name", g.id)} has a game profile (iOS) but is not ported to Android yet (an experimental port tries it with that profile)'
+        info['reason'] = f'{g.get("name", g.id)} 有游戏配置文件（iOS），但尚未移植到 Android（实验性移植会使用该配置尝试）'
         return info
     info.update(android=profiles.entry(g, ap).as_dict(), supported=True)
-    if ap.status == 'wip': info['reason'] = f'{g.get("name", g.id)} is a work in progress: it plays, but parts of it are missing (the Games table in README.md says which)'
+    if ap.status == 'wip': info['reason'] = f'{g.get("name", g.id)} 仍在开发中：可以游玩，但部分内容缺失（缺失项见 README.md 的游戏表）'
     if pack not in builds:
-        info['reason'] = (info['reason'] + '; ' if info['reason'] else '') + f'{pack} is not a version the profile was brought up on ({", ".join(builds)}): it is packed from a derived profile, without that version\'s fixes'
+        info['reason'] = (info['reason'] + '；' if info['reason'] else '') + f'{pack} 不是该配置文件测试过的版本（{"、".join(builds)}）：将由派生配置打包，不含该版本的修正'
     return info
 
 
@@ -178,19 +178,19 @@ class Port:
     def run(self):
         o = self.o
         o.folder = Path(o.folder).expanduser().resolve()
-        if not o.folder.is_dir(): raise BuildError(f'not a folder: {o.folder}')
+        if not o.folder.is_dir(): raise BuildError(f'不是文件夹：{o.folder}')
         version_code('v0', o.vercode_offset); alias_headroom_gb(o.alias_headroom)   # an offset or headroom out of range fails now, not after the shaders
         if o.vulkan_driver:
             o.vulkan_driver = Path(o.vulkan_driver).expanduser().resolve()
-            if not o.vulkan_driver.is_file() or o.vulkan_driver.suffix != '.so': raise BuildError(f'--vulkan-driver: not a .so library: {o.vulkan_driver}')
+            if not o.vulkan_driver.is_file() or o.vulkan_driver.suffix != '.so': raise BuildError(f'--vulkan-driver：不是 .so 库：{o.vulkan_driver}')
         if o.shared_font:
             o.shared_font = Path(o.shared_font).expanduser().resolve()
-            if not o.shared_font.is_file() or o.shared_font.suffix.lower() != '.ttf': raise BuildError(f'--shared-font: not a .ttf font: {o.shared_font}')
+            if not o.shared_font.is_file() or o.shared_font.suffix.lower() != '.ttf': raise BuildError(f'--shared-font：不是 .ttf 字体：{o.shared_font}')
         if fw := o.firmware or self.cfg.get('firmware'):
             o.firmware = Path(fw).expanduser().resolve()
-            if not o.firmware.is_dir(): raise BuildError(f'--firmware: not a folder: {o.firmware}')
+            if not o.firmware.is_dir(): raise BuildError(f'--firmware：不是文件夹：{o.firmware}')
         keys = o.keys or self.cfg.get('keys')
-        if not keys: raise BuildError('no prod.keys: give -k / --keys, or set it once with `porter config keys <path>`')
+        if not keys: raise BuildError('缺少 prod.keys：请给出 -k / --keys，或用 `porter config keys <路径>` 设置一次')
         o.keys = Path(keys).expanduser().resolve()
         try: self.tools = toolchain.require(self.cfg, str(o.keys), adb=o.install)
         except toolchain.ToolError as e: raise BuildError(str(e)) from e
@@ -218,41 +218,41 @@ class Port:
         nsp.rmtree(self.work / 'tmp')
         self.result.update(title_id=self.g.id, name=self.app_name, package=self.package, version=self.pkg_ver, display=self.display, language=self.lang,
                            status=self.ap.status, derived=bool(self.derived), installed=bool(o.install))
-        say(f'done: {self.result["apk"]} and {self.result["data"]}')
-        if self.derived: say(f'[RED] {self.derived}: the port is built from a derived profile and may not run as the profile\'s tested version does'
-                             + (f'; {self.derived_mem}' if self.derived_mem else ''))
+        say(f'完成：{self.result["apk"]} 与 {self.result["data"]}')
+        if self.derived: say(f'[RED] {self.derived}：本次移植由派生配置构建，运行效果可能不及该配置测试过的版本'
+                             + (f'；{self.derived_mem}' if self.derived_mem else ''))
         for x in self.lost: say(f'[RED] {x}')
         return self.result
 
     # ---- inputs: the folder's games and versions, the profile, the version to pack ----
     def inputs(self):
         o = self.o
-        say(f'game folder: {o.folder}')
+        say(f'游戏文件夹：{o.folder}')
         self.app, self.fam = nsp.scan_nsps(o.folder, dumps.EXTS, o.keys)
         tid = f'{self.app:016X}'
         self.work = o.folder / f'{tid}_build'
         g, ap = profiles.by_title(self.app)
         self.provisional = False
         if not (g and ap):
-            what = f'no game profile for {tid}' if not g else f'{g.get("name", g.id)} ({g.id}) has a game profile but is not ported to Android yet (no android.tsv in {g.dir})'
-            if not o.experimental: raise BuildError(f'{what}: --experimental tries it anyway (profiles: `porter profiles`)')
+            what = f'没有 {tid} 的游戏配置文件' if not g else f'{g.get("name", g.id)}（{g.id}）有游戏配置文件，但尚未移植到 Android（{g.dir} 中没有 android.tsv）'
+            if not o.experimental: raise BuildError(f'{what}：加 --experimental 仍可尝试（配置文件列表：`porter profiles`）')
             g, ap = self.experimental_profile(g, tid)
         self.g, self.ap = g, ap
         self.package = o.package or ap.package
-        if not re.fullmatch(r'[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+', self.package): raise BuildError(f'not a package name: {self.package}')
-        say(f'game profile: {g.id} {g.get("name", "")} (Android: {ap.status}' + (f', tested on {ap.tested}' if ap.tested else '') + ')')
+        if not re.fullmatch(r'[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+', self.package): raise BuildError(f'不是合法的包名：{self.package}')
+        say(f'游戏配置：{g.id} {g.get("name", "")}（Android：{ap.status}' + (f'，测试设备 {ap.tested}' if ap.tested else '') + '）')
         builds, need = g.builds(), g.words('shader_versions')
         have = nsp.nsp_versions(self.fam, builds)
         self.derived, self.derived_mem, self.lost = '', '', []
         if self.provisional:   # the version the survey saw
             self.pkg_ver = o.version or g.get('package')
-            if self.pkg_ver not in builds: raise BuildError(f'the version to pack must be one the provisional profile registers: {", ".join(builds)}')
+            if self.pkg_ver not in builds: raise BuildError(f'要打包的版本必须是临时配置所登记的版本：{"、".join(builds)}')
         else:
             self.pkg_ver = o.version or max(have, key=nsp.vnum)
-            if self.pkg_ver not in have: raise BuildError(f'the version to pack ({self.pkg_ver}) is not in the folder, which holds {", ".join(sorted(have, key=nsp.vnum))}')
-            if self.pkg_ver not in builds: self.derived = f'{self.pkg_ver} is not a version game profile {g.id} registers ({", ".join(f"{v} {b["display"]}" for v, b in builds.items())})'
-            elif not all(v in have for v in need): self.derived = f'the folder has no {", ".join(v for v in need if v not in have)}, whose files the profile\'s shader tables were made from'
-            if self.derived: say(f'{self.derived}: packing {self.pkg_ver} from a profile derived from it')
+            if self.pkg_ver not in have: raise BuildError(f'要打包的版本（{self.pkg_ver}）不在该文件夹中；文件夹内为 {", ".join(sorted(have, key=nsp.vnum))}')
+            if self.pkg_ver not in builds: self.derived = f'{self.pkg_ver} 不是游戏配置 {g.id} 登记的版本（{", ".join(f"{v} {b["display"]}" for v, b in builds.items())}）'
+            elif not all(v in have for v in need): self.derived = f'文件夹中缺少 {", ".join(v for v in need if v not in have)}，而该配置的着色器表正是由这些版本的文件生成的'
+            if self.derived: say(f'{self.derived}：将用派生配置打包 {self.pkg_ver}')
         self.versions = [self.pkg_ver] if self.derived else need + ([self.pkg_ver] if self.pkg_ver not in need else [])
         self.have = have
         self.check_space()
@@ -268,7 +268,7 @@ class Port:
         game, temp = sum(dumps.size(f) for f in files), sum(dumps.size(f) for f in files if dumps.compressed(f))
         built = sum(f.stat().st_size for f in self.work.rglob('*') if f.is_file()) if self.work.is_dir() else 0
         need, free = max(0, 2 * game + temp - built) + 2**30, shutil.disk_usage(self.o.folder).free
-        if free < need: raise BuildError(f'not enough disk space on {self.o.folder.anchor}: the port needs about {need / 2**30:.1f} GB more, {free / 2**30:.1f} GB is free')
+        if free < need: raise BuildError(f'{self.o.folder.anchor} 上磁盘空间不足：本次移植还需要约 {need / 2**30:.1f} GB，当前可用 {free / 2**30:.1f} GB')
 
     def use_profile_dir(self, pdir, first):   # every tool finds the game's profile in pdir (game.py DM_GAMES_DIR; first: before dm/games)
         dirs = [str(pdir)] + [d for d in os.environ.get('DM_GAMES_DIR', '').split(os.pathsep) if d and d != str(pdir)]
@@ -281,7 +281,7 @@ class Port:
         A game brought up this way gets its profile into dm/games by hand (docs/ARCHITECTURE.md "Adding a game")"""
         pdir = self.work / 'profile'; d = pdir / tid
         if g is None:
-            if (d / 'game.tsv').is_file(): say(f'no game profile for {tid}: reusing the provisional profile from the last run ({d}; delete it to survey again)')
+            if (d / 'game.tsv').is_file(): say(f'没有 {tid} 的游戏配置文件：复用上次运行留下的临时配置（{d}；删除它即可重新扫描）')
             else:
                 ups = [p for _, p in sorted(self.fam['updates'], key=lambda u: u[0] or 0)[-1:]]   # the survey reads the base game and the newest update
                 m = self.unpack([self.fam['base'], *ups])
@@ -290,7 +290,7 @@ class Port:
                 facts['survey'] = f'<NSP folder>/{tid}_survey/survey.md'
                 nsp.write_profile(d, self.app, facts)
             self.provisional = True
-            say('[RED] provisional game profile: values guessed from the survey, the game may not start')
+            say('[RED] 临时游戏配置：数值由扫描推测得出，游戏可能无法启动')
         elif not (d / 'game.tsv').is_file() or (g.dir / 'game.tsv').stat().st_mtime > (d / 'game.tsv').stat().st_mtime:   # the iOS profile as it is now
             nsp.rmtree(d); shutil.copytree(g.dir, d, ignore=shutil.ignore_patterns('patches.py', '__pycache__'))   # patches.py stays in dm/games, where patch_nso.py finds it
         if not (d / 'android.tsv').is_file():
@@ -306,7 +306,7 @@ class Port:
         picks = nsp.pick_nsps(self.fam, self.have, self.versions)
         ex = self.work / 'extract'; ex.mkdir(parents=True, exist_ok=True)
         need = sum(dumps.size(p) * (2 if dumps.compressed(p) else 1) for p in {p for b, u in picks.values() for p in (b, u) if p}) / 2**30 + 6
-        if nsp.free_gb(self.work) < need and not all((ex / v).exists() for v in self.versions): raise BuildError(f'less than {need:.0f} GB free on the volume of {self.work}')
+        if nsp.free_gb(self.work) < need and not all((ex / v).exists() for v in self.versions): raise BuildError(f'{self.work} 所在卷的可用空间不足 {need:.0f} GB')
         # NSZ / XCZ: only what a stage will read is decompressed, all in one stage before nx_extract runs (a version nsp.extract reuses reads nothing)
         fresh = lambda v: (ex / v / 'ExeFS/main').exists() and (ex / v / 'RomFS' / g.get('romfs_marker')).exists()   # nsp.extract's reuse test
         zdlc = [p for _, _, p in self.fam['dlc'] if dumps.compressed(p)]
@@ -317,15 +317,15 @@ class Port:
         dlc_reused = bool(zdlc) and (self.work / 'aoc').is_dir() and nsp.reused(dkf, dkey) is not None
         m = self.unpack([p for v in self.versions if not fresh(v) for p in picks[v] if p] + ([] if dlc_reused else zdlc))
         picks = {v: tuple(m.get(p, p) if p else None for p in bu) for v, bu in picks.items()}
-        PROG.stage('build nx_extract')
+        PROG.stage('构建 nx_extract')
         nx = nsp.build_nx_extract(NXNATIVE, self.work, self.logs, self.env)
         PROG.end()
         self.dirs = {ver: nsp.extract(nx, o.keys, ex, ver, *picks[ver], None, self.logs, g) for ver in self.versions}
         bad = [] if self.derived else [f'{v}: {x}' for v in self.versions for x in nsp.build_mismatch(self.dirs[v], v, g)]
-        if bad and self.provisional: raise BuildError(f'not the builds the provisional profile registers: {"; ".join(bad)}')
+        if bad and self.provisional: raise BuildError(f'与临时配置登记的构建不符：{"; ".join(bad)}')
         if bad:
-            self.derived = f'not the builds game profile {g.id} registers: {"; ".join(bad)}'
-            say(f'{self.derived}: packing {self.pkg_ver} from a profile derived from it')
+            self.derived = f'与游戏配置 {g.id} 登记的构建不符：{"; ".join(bad)}'
+            say(f'{self.derived}：将用派生配置打包 {self.pkg_ver}')
             self.versions, self.dirs = [self.pkg_ver], {self.pkg_ver: self.dirs[self.pkg_ver]}
         self.game = self.dirs[self.pkg_ver]
         nsp.rmtree(self.work / 'profile-mem')   # an earlier run's --alias-headroom copy (mem_profile)
@@ -336,17 +336,17 @@ class Port:
             other = self.pkg_ver not in g.builds() or bool(nsp.build_mismatch(self.game, self.pkg_ver, g))
             gb = self.o.alias_headroom if self.o.alias_headroom is not None else (ALIAS_HEADROOM >> 30 if other else 0)
             if grown := alias_headroom(pdir / g.id / 'game.tsv', gb):
-                self.derived_mem = f'its alias region has {gb} GB of headroom over the tested build\'s (mem_alias {grown[0]:#x} → {grown[1]:#x}); {ALIAS_HINT}'
-                say(f'derived game profile: {self.derived_mem}' + ('' if self.o.alias_headroom is None else ' (--alias-headroom)'))
+                self.derived_mem = f'其别名区域比测试过的构建多 {gb} GB（mem_alias {grown[0]:#x} → {grown[1]:#x}）；{ALIAS_HINT}'
+                say(f'派生游戏配置：{self.derived_mem}' + ('' if self.o.alias_headroom is None else '（--alias-headroom）'))
             self.use_profile_dir(pdir, first=True)
             self.g = game.load(g.id); self.ap = android_profile.AndroidProfile(self.g)
-            say(f'derived game profile for {self.pkg_ver} ({disp}): {self.g.dir}')
-            self.lost = [f'{x}: the port may fail where they are needed; register them for this build (dm/tools/nso_fnmap.py carries addresses over) or port a version the '
-                         f'profile registers' for x in lost_patches(g.builds(), self.game / 'ExeFS', g.words('modules'))]
+            say(f'{self.pkg_ver}（{disp}）的派生游戏配置：{self.g.dir}')
+            self.lost = [f'{x}：需要它们的地方本次移植可能失败；请为该构建登记（dm/tools/nso_fnmap.py 可迁移地址），或移植该配置登记的版本'
+                         for x in lost_patches(g.builds(), self.game / 'ExeFS', g.words('modules'))]
             for x in self.lost: say(f'[RED] {x}')
         else: self.mem_profile()
         if dlc_reused:
-            PROG.stage('extract DLC'); self.aoc = self.work / 'aoc'; PROG.end(f'{len(self.fam["dlc"])} DLC, reused (inputs unchanged)')
+            PROG.stage('解压 DLC'); self.aoc = self.work / 'aoc'; PROG.end(f'{len(self.fam["dlc"])} 个 DLC，已复用（输入未变）')
         else:
             self.aoc = nsp.extract_aoc(nx, o.keys, NXNATIVE, self.work, self.app, dict(self.fam, dlc=[(t, v, m.get(p, p)) for t, v, p in self.fam['dlc']]), self.logs)
             if zdlc: dkf.write_text(f'{dkey}\n')
@@ -358,10 +358,10 @@ class Port:
         self.display = nacp.version(self.game / 'control.nacp') or nacp.version(self.base / 'control.nacp') or '1.0'
         lang_in = o.language or self.cfg.get('language')
         want = nsp.language_code(lang_in) if lang_in else 'en-US'
-        if not want: raise BuildError(f'unknown game language {lang_in!r}')
+        if not want: raise BuildError(f'未知的游戏语言 {lang_in!r}')
         have = nacp.languages(self.game / 'control.nacp') or nacp.languages(self.base / 'control.nacp')
         self.lang = nsp.game_language(want, bool(lang_in), have)
-        say(f'app: {self.app_name} {self.display} ({self.package}), game language {self.lang}')
+        say(f'应用：{self.app_name} {self.display}（{self.package}），游戏语言 {self.lang}')
 
     def mem_profile(self):
         """The player's --alias-headroom on a version the profile was brought up on (or a provisional or experimental profile): a copy of the profile in
@@ -372,10 +372,10 @@ class Port:
         d = pdir / self.g.id; shutil.copytree(self.g.dir, d, ignore=shutil.ignore_patterns('patches.py', '__pycache__'))
         grown = alias_headroom(d / 'game.tsv', self.o.alias_headroom)
         if not grown:
-            nsp.rmtree(pdir); say(f'--alias-headroom {self.o.alias_headroom}: {self.g.get("name", self.g.id)} declares no virtual address memory (sys_resource): its layout stays as it is'); return
+            nsp.rmtree(pdir); say(f'--alias-headroom {self.o.alias_headroom}：{self.g.get("name", self.g.id)} 未声明虚拟地址内存（sys_resource）：其布局保持不变'); return
         self.use_profile_dir(pdir, first=True)
         self.g = game.load(self.g.id); self.ap = android_profile.AndroidProfile(self.g)
-        say(f'alias region: mem_alias {grown[0]:#x} → {grown[1]:#x} (+{self.o.alias_headroom} GB, --alias-headroom): {self.g.dir}')
+        say(f'别名区域：mem_alias {grown[0]:#x} → {grown[1]:#x}（+{self.o.alias_headroom} GB，--alias-headroom）：{self.g.dir}')
 
     # ---- NSZ / XCZ: decompressed for the stages that read the game files (porter.dumps) into <build folder>/tmp/dumps/, deleted once extracted ----
     def unpack(self, paths):
@@ -384,13 +384,13 @@ class Port:
         if todo:
             d = self.work / 'tmp/dumps'; d.mkdir(parents=True, exist_ok=True)
             sizes = {p: dumps.size(p) for p in todo}; total, n = sum(sizes.values()), [0]
-            if nsp.free_gb(d) < total / 2**30 + 1: raise BuildError(f'decompressing {", ".join(p.name for p in todo)} needs {total / 2**30:.1f} GB on the volume of {d}, which has {nsp.free_gb(d):.1f} GB free')
-            PROG.add(1); PROG.stage('decompress NSZ / XCZ', unit='B', total=total)
+            if nsp.free_gb(d) < total / 2**30 + 1: raise BuildError(f'解压 {", ".join(p.name for p in todo)} 需要 {total / 2**30:.1f} GB，而 {d} 所在卷仅剩 {nsp.free_gb(d):.1f} GB')
+            PROG.add(1); PROG.stage('解压 NSZ / XCZ', unit='B', total=total)
             def done(k): n[0] += k; PROG.set(done=n[0])
             for p in todo:
-                say(f'decompressing {p.name} ({sizes[p] / 2**30:.2f} GB) → {d}')
+                say(f'正在解压 {p.name}（{sizes[p] / 2**30:.2f} GB）→ {d}')
                 self.unpacked[p] = dumps.decompress(p, d / dumps.unpacked_name(p), done)
-            PROG.end(f'{len(todo)} file{"s" if len(todo) > 1 else ""}, {nsp.amount(total, "B")}, NCAs checked against their SHA-256 (not in ticketless dumps, whose NCA headers were rewritten)')
+            PROG.end(f'{len(todo)} 个文件，{nsp.amount(total, "B")}，NCA 已按 SHA-256 校验（无 ticket 的转储除外，其 NCA 头已被重写）')
         return {p: self.unpacked.get(p, p) for p in paths}
 
     def drop_unpacked(self):
@@ -406,13 +406,13 @@ class Port:
         if not ids: return None
         need = ', '.join(f'{t:016x}' for t in ids)
         if not self.o.firmware:
-            say(f'[RED] {self.g.get("name", self.g.id)} reads system data from the console\'s firmware ({need}); without --firmware <your firmware dump\'s system content '
-                f'folder> the host\'s stand-in is used and those parts draw nothing (MiiModel: the Mii heads)')
+            say(f'[RED] {self.g.get("name", self.g.id)} 需要从主机固件读取系统数据（{need}）；没有 --firmware <你的固件转储中的系统内容文件夹> '
+                f'时将使用宿主提供的替代数据，这些内容将无法绘制（MiiModel：Mii 头像）')
             return None
-        PROG.stage('extract system data')
+        PROG.stage('解压系统数据')
         for t in ids:
             nsp.run([nx, self.o.keys, '--sysdata', self.o.firmware, f'{t:016x}', out / f'{t:016x}'], self.logs / 'sysdata.log', env=self.env)
-        PROG.end(f'{need} from {self.o.firmware}')
+        PROG.end(f'{need}，来自 {self.o.firmware}')
         return out
 
     def check_graphics(self):
@@ -422,8 +422,8 @@ class Port:
         gfx = src['graphics'][0]
         # OpenGL ES: the device's own GL driver runs it (dm/android/gl_android.c); no shaders to translate, the game compiles its GLSL ES at run time
         self.gl = gfx == 'gl'
-        if self.gl: say(f"{self.app_name} renders with OpenGL ({src['graphics'][1]}): the Android host hands its GL calls to the device's OpenGL ES driver"); return
-        if gfx != 'nvn': raise BuildError(f'{self.app_name} renders with {gfx} ({src["graphics"][1]}): the Android host replays NVN or OpenGL ES only so far')
+        if self.gl: say(f"{self.app_name} 使用 OpenGL（{src['graphics'][1]}）渲染：Android 宿主把它的 GL 调用交给设备的 OpenGL ES 驱动"); return
+        if gfx != 'nvn': raise BuildError(f'{self.app_name} 使用 {gfx}（{src["graphics"][1]}）渲染：Android 宿主目前只支持回放 NVN 与 OpenGL ES')
         # Game Freak's GFPAKs and Trinity packs with Oodle entries: decoded by the game's own decoder on the Android device (device_oodle); PKZ packs still need the Mac host
         self.oodle_why = src['oodle_packs'][1] if src['oodle_packs'][0] and ('GFPAK' in src['oodle_packs'][1] or 'Trinity' in src['oodle_packs'][1]) else ''
         # Unreal paks (version 11) and IoStore containers: their shader code archives are decoded with the game's own Oodle on the device too (device_ue)
@@ -431,13 +431,13 @@ class Port:
         why = self.oodle_why or self.ue_why
         if why:
             if not self.tools.get('adb'):   # adb is optional for a port that does not install (toolchain.require): this one needs it
-                raise BuildError(f"{self.app_name}'s shaders are in Oodle-compressed archives ({why}): the port decodes them with the game's own decoder on the Android "
-                                 f'device, so it needs adb and the device even without installing. {NO_ADB}; then connect the device (USB debugging on) and port again')
+                raise BuildError(f"{self.app_name} 的着色器位于 Oodle 压缩包中（{why}）：移植会用游戏自带的解码器在 Android "
+                                 f'设备上解码，因此即使不安装也需要 adb 与设备。{NO_ADB}；然后连接设备（开启 USB 调试）并重新移植')
             try: Adb(self.tools['adb'], self.o.device or self.cfg.get('device'), log=say).pick()
-            except (AdbError, KeyError) as e: raise BuildError(f"{self.app_name}'s shaders are in Oodle-compressed archives ({why}): the port decodes them with the game's own decoder on "
-                                                               f'the Android device, so connect it (adb) and port again ({e})') from e
+            except (AdbError, KeyError) as e: raise BuildError(f"{self.app_name} 的着色器位于 Oodle 压缩包中（{why}）：移植会用游戏自带的解码器在 "
+                                                               f'Android 设备上解码，因此请连接设备（adb）后重新移植（{e}）') from e
         for k in ('glslc_capture', 'ue_legacy') + (() if self.ue_why else ('ue_decode',)) + (() if self.oodle_why else ('oodle_packs',)):
-            if src[k][0]: raise BuildError(f'{self.app_name} needs a step that boots the game in the Mac host ({src[k][1]}), which the Android port cannot run yet')
+            if src[k][0]: raise BuildError(f'{self.app_name} 需要先在 Mac 宿主中启动游戏才能完成的一步（{src[k][1]}），Android 移植物前无法执行')
 
     # ---- the game's own Oodle decoder on the device, for the shader split (Pokémon Legends: Arceus's GFPAKs, Pokémon Legends: Z-A's Trinity packs) ----
     ODEV = '/data/local/tmp/nx2a-oodle'   # dmhost, the rewritten modules and the job, removed afterwards
@@ -450,7 +450,7 @@ class Port:
         → the split's environment"""
         import mmap
         import struct
-        PROG.set(step="the game's Oodle entries in a job file")
+        PROG.set(step="正在把游戏的 Oodle 条目写入任务文件")
         tmp = self.work / 'tmp/oodle'; nsp.rmtree(tmp); tmp.mkdir(parents=True)
         recs, job = [], tmp / 'job.bin'   # recs: (label, archive size, entry index) of each record, in order; a Trinity file's index is (pack offset, index in the pack)
         with open(job, 'wb') as jf:
@@ -472,7 +472,7 @@ class Port:
                             for k, _, comp, n, st, sz in trinity.pack_files(d, off):
                                 if comp == 3: jf.write(struct.pack('<II', sz, n)); jf.write(d[st:st + sz]); recs.append((label, len(d), (off, k)))
             jf.seek(4); jf.write(struct.pack('<I', len(recs)))
-        PROG.set(step=f"the game's Oodle decoder on the device: {len(recs):,} entries, {job.stat().st_size / 2**30:.1f} GB")
+        PROG.set(step=f"设备上运行游戏自带的 Oodle 解码器：{len(recs):,} 个条目，{job.stat().st_size / 2**30:.1f} GB")
         self.device_oodle_job(job, tmp / 'job.out', bnsh=True)
         # Index result ranges, not their payloads: read_bytes + entry slices + joins held several copies of the decoded shaders in RAM.
         # Check every record before writing a decoded archive; a short last payload used to be silently accepted by a bytes slice.
@@ -480,16 +480,16 @@ class Port:
         with (tmp / 'job.out').open('rb') as result:
             total = os.fstat(result.fileno()).st_size; head = result.read(8)
             if len(head) != 8 or head[:4] != b'DMOR' or struct.unpack_from('<I', head, 4)[0] != len(recs):
-                raise BuildError("the game's Oodle decoder on the device answered for other entries than it was given")
+                raise BuildError('设备上游戏自带的 Oodle 解码器返回的条目数与请求不一致')
             for label, size, i in recs:
                 word = result.read(4)
-                if len(word) != 4: raise BuildError(f"the game's Oodle decoder on the device returned a truncated result for {label} entry {i}")
+                if len(word) != 4: raise BuildError(f'设备上游戏自带的 Oodle 解码器对 {label} 的条目 {i} 返回了被截断的结果')
                 n = struct.unpack('<I', word)[0]
                 ent = by.setdefault(label, (size, {}))[1]
                 if n == 0xffffffff: continue
-                if n == 0: raise BuildError(f"the game's Oodle decoder on the device failed on {label} entry {i}")
+                if n == 0: raise BuildError(f'设备上游戏自带的 Oodle 解码器处理 {label} 的条目 {i} 失败')
                 off = result.tell()
-                if n > total - off: raise BuildError(f"the game's Oodle decoder on the device returned a truncated result for {label} entry {i}")
+                if n > total - off: raise BuildError(f'设备上游戏自带的 Oodle 解码器对 {label} 的条目 {i} 返回了被截断的结果')
                 ent[i] = (off, n); result.seek(n, os.SEEK_CUR)
             dec = tmp / 'decoded'; dec.mkdir()
             for label, (size, ent) in by.items():
@@ -501,11 +501,11 @@ class Port:
                         result.seek(off)
                         while n:
                             chunk = result.read(min(n, 1 << 20))
-                            if not chunk: raise BuildError(f"the game's Oodle decoder on the device returned a truncated result for {label} entry {i}")
+                            if not chunk: raise BuildError(f'设备上游戏自带的 Oodle 解码器对 {label} 的条目 {i} 返回了被截断的结果')
                             out.write(chunk); n -= len(chunk)
         nsp.rmtree(tmp / 'job.out')
-        say(f"shaders in Oodle-compressed archives ({self.oodle_why}): {len(recs):,} entries decoded by the game's own decoder on the device, "
-            f"{sum(len(e) for _, e in by.values()):,} of them hold shaders")
+        say(f'Oodle 压缩包中的着色器（{self.oodle_why}）：{len(recs):,} 个条目已由游戏自带的解码器在设备上解码，'
+            f'其中 {sum(len(e) for _, e in by.values()):,} 个含着色器')
         return {'DM_GFPAK_DECODED': str(dec)}
     def device_oodle_job(self, job, out, bnsh=False):
         """One Oodle job file (hle_oodle.c: "DMOJ" records) decoded on the device into out ("DMOR"); the job file is removed. The host as an executable and the rewritten modules
@@ -514,7 +514,7 @@ class Port:
         if not adb:
             adb = Adb(self.tools['adb'], self.o.device or self.cfg.get('device'), log=say); adb.pick()
             host = self.aw / ('host-debug' if self.o.debug else 'host')   # the host stage's own folder: its objects serve both
-            PROG.set(step="building the host as a tool for the game's Oodle decoder")
+            PROG.set(step="正在把宿主构建为游戏 Oodle 解码器的工具")
             nsp.run([PY, DM / 'android/build.py', '--game', self.g.id, '--ndk', self.tools['ndk'], '--out', host, '--exe', '--jobs', str(self.o.jobs)] + ([] if self.o.debug else ['--release']),
                     self.logs / 'android_oodle_host.log', env=self.env)
             adb.shell(f'rm -rf {self.ODEV}; mkdir -p {self.ODEV}/mods', check=False)
@@ -525,7 +525,7 @@ class Port:
         r = adb.shell(f'chmod 755 {self.ODEV}/dmhost; cd {self.ODEV} && rm -f job.bin.out && DM_OODLE_JOB={self.ODEV}/job.bin{" DM_OODLE_JOB_BNSH=1" if bnsh else ""} timeout 3300 ./dmhost mods '
                       f'> job.log 2>&1; echo "exit $?"; grep -a -e DM_OODLE_JOB -e RED job.log | tail -5', timeout=3600)
         (self.logs / 'android_oodle_job.log').write_text(r, encoding='utf-8')
-        if 'exit 0' not in r: raise BuildError(f"the game's Oodle decoder on the device failed (see {self.logs / 'android_oodle_job.log'})")
+        if 'exit 0' not in r: raise BuildError(f"设备上游戏自带的 Oodle 解码器执行失败（见 {self.logs / 'android_oodle_job.log'}）")
         adb.run('pull', f'{self.ODEV}/job.bin.out', str(out), timeout=1800)
         adb.shell(f'rm -f {self.ODEV}/job.bin {self.ODEV}/job.bin.out', check=False)
 
@@ -543,7 +543,7 @@ class Port:
         import struct
         todo = {v: self.dirs[v] for v in self.versions if not ((self.dirs[v] / 'ue_shaders/stamp').exists() and (self.dirs[v] / 'ue_shaders/stamp').read_text() == nsp.ue_stamp(self.dirs[v]))}
         if not todo: return
-        PROG.add(1); PROG.stage('UE shader decode', step='the shader code archives')
+        PROG.add(1); PROG.stage('UE 着色器解码', step='着色器代码归档')
         tmp = self.work / 'tmp/ue'; total = 0
         for v, d in todo.items():
             cache, jd = {}, tmp / f'job_{v}'
@@ -553,65 +553,65 @@ class Port:
                     k = (hashlib.sha1(comp).digest(), n)
                     if k in cache: return cache[k]
                     want.setdefault(k, bytes(comp)); return bytes(n)
-                nsp.rmtree(jd); PROG.set(step=f'{v}: the shader code archives (round {rnd + 1})')
+                nsp.rmtree(jd); PROG.set(step=f'{v}：着色器代码归档（第 {rnd + 1} 轮）')
                 try: listing, n = uepak.job(str(d / 'RomFS'), str(d / 'ExeFS/main'), str(jd), decode=dec)
                 except (ValueError, struct.error, IndexError) as e:
-                    if not want: raise BuildError(f'{v}: the Unreal shader code archives do not read: {e}') from e
+                    if not want: raise BuildError(f'{v}：无法读取 Unreal 着色器代码归档：{e}') from e
                 if not want: break
                 job, out = tmp / 'round.job', tmp / 'round.out'
                 with open(job, 'wb') as f:
                     f.write(b'DMOJ' + struct.pack('<I', len(want)))
                     for (_, raw), comp in want.items(): f.write(struct.pack('<II', len(comp), raw) + comp)
-                PROG.set(step=f"{v}: {len(want):,} Oodle streams with the game's decoder on the device (round {rnd + 1})")
+                PROG.set(step=f"{v}：{len(want):,} 个 Oodle 流交给设备上游戏自带的解码器（第 {rnd + 1} 轮）")
                 self.device_oodle_job(job, out)
                 b = out.read_bytes(); nsp.rmtree(out)
-                if b[:4] != b'DMOR' or struct.unpack_from('<I', b, 4)[0] != len(want): raise BuildError("the game's Oodle decoder on the device answered for other streams than it was given")
+                if b[:4] != b'DMOR' or struct.unpack_from('<I', b, 4)[0] != len(want): raise BuildError('设备上游戏自带的 Oodle 解码器返回的流与请求的不一致')
                 o, got = 8, 0
                 for k in want:
                     ln = struct.unpack_from('<I', b, o)[0]; o += 4
                     if ln == k[1]: cache[k] = b[o:o + ln]; got += 1   # a stream decoded from zeros fails (0) and is asked for again with its real bytes
                     o += ln if ln != 0xffffffff else 0
-                say(f'{v}: round {rnd + 1}: {got:,} of {len(want):,} Oodle streams decoded on the device')
-                if not got: raise BuildError(f"{v}: the game's Oodle decoder on the device decoded none of {len(want):,} streams (see {self.logs / 'android_oodle_job.log'})")
-            else: raise BuildError(f'{v}: the Unreal shader code archives still need Oodle streams after {self.UE_ROUNDS} rounds')
-            if not listing: raise BuildError(f'the RomFS has Unreal paks, but none under {d / "RomFS"} holds a shader code archive: where the shaders are has to be found first')
+                say(f'{v}：第 {rnd + 1} 轮：{len(want):,} 个 Oodle 流中已在设备上解码 {got:,} 个')
+                if not got: raise BuildError(f"{v}：设备上游戏自带的 Oodle 解码器未能解码 {len(want):,} 个流中的任何一个（见 {self.logs / 'android_oodle_job.log'}）")
+            else: raise BuildError(f'{v}：经过 {self.UE_ROUNDS} 轮后仍有 Oodle 流未被解码')
+            if not listing: raise BuildError(f'RomFS 中有 Unreal pak，但 {d / "RomFS"} 下没有任何一个包含着色器代码归档：需要先找到着色器的位置')
             if n:   # Oodle-compressed shaders in the paks' archives (Octopath Traveler 0): uepak.job's own job file
-                PROG.set(step=f"{v}: {n:,} shaders with the game's decoder on the device")
+                PROG.set(step=f"{v}：{n:,} 个着色器交给设备上游戏自带的解码器")
                 self.device_oodle_job(jd / 'oodle.job', jd / 'oodle.job.out')   # (finish reads job.json and the output only)
             out = d / 'ue_shaders.partial'; nsp.rmtree(out)
             uepak.finish(str(jd), str(out)); (out / 'stamp').write_text(nsp.ue_stamp(d))
             nsp.swap_in(out, d / 'ue_shaders'); nsp.rmtree(jd)
-            say(f'{v}: ' + '; '.join(f'{x["name"]} {x["shaders"]:,} shaders' + (f' ({x["compression"]})' if x.get('compression') else '') for x in listing))
+            say(f'{v}：' + '；'.join(f'{x["name"]} {x["shaders"]:,} 个着色器' + (f'（{x["compression"]}）' if x.get('compression') else '') for x in listing))
             total += n + sum(x['shaders'] for x in listing if x['compression'] == 'IoStore, decoded')
         nsp.rmtree(tmp)
-        PROG.end(f'{total:,} shaders decoded on the device')
+        PROG.end(f'已在设备上解码 {total:,} 个着色器')
     def device_oodle_end(self):
         adb = getattr(self, 'oodle_adb', None)
         if not adb: return
         self.oodle_adb = None
         try: adb.shell(f'rm -rf {self.ODEV}', check=False)
-        except AdbError as e: say(f'the Oodle decoder left on the device ({e}): {self.ODEV}')
+        except AdbError as e: say(f'设备上仍留有 Oodle 解码器（{e}）：{self.ODEV}')
 
     # ---- 60 fps (--fps60): the profile's own cap (fps_target: frame-step stubs or hle_fpslock.c's rows), else the community's FPSLocker config of the build ----
     def fps_unlock(self):
         self.fps_env, self.fps_files = [], {}
         self.env.pop('DM_PATCHES_EXTRA', None)
         if not self.o.fps60: return
-        PROG.stage('60 fps', step='the game profile')
+        PROG.stage('60 fps', step='游戏配置')
         if self.g.get('fps_target', '0') != '0':
-            self.fps_env = ['DM_FPS_TARGET=60']; PROG.end('the game profile\'s own frame-rate cap (fps_target), at 60'); return
+            self.fps_env = ['DM_FPS_TARGET=60']; PROG.end('使用游戏配置自带的帧率上限（fps_target），设为 60'); return
         img, bid = fpslocker.nso_image(self.game / 'ExeFS/main')
         src = fpslocker.url(self.g.id, bid); d = self.aw / 'fpslock'; d.mkdir(exist_ok=True); cache = d / f'{bid[:16].upper()}.yaml'
-        PROG.set(step='fetching the FPSLocker-Warehouse config')
+        PROG.set(step='正在获取 FPSLocker-Warehouse 配置')
         try: text = fpslocker.fetch(self.g.id, bid)
         except OSError as e:
-            if not cache.is_file(): say(f'[RED] 60 fps: {src} could not be fetched ({e}): no FPSLocker config applied; built-in profile patches are unaffected'); PROG.end('external config not fetched; built-in patches unaffected'); return
-            text = cache.read_text(encoding='utf-8'); say(f'[RED] 60 fps: {src} could not be fetched ({e}): using the copy fetched before')
+            if not cache.is_file(): say(f'[RED] 60 fps：无法获取 {src}（{e}）：未应用 FPSLocker 配置，内置补丁不受影响'); PROG.end('未获取到外部配置；内置补丁不受影响'); return
+            text = cache.read_text(encoding='utf-8'); say(f'[RED] 60 fps：无法获取 {src}（{e}）：使用此前获取的副本')
         if text is None:
-            nsp.rmtree(cache); say(f'60 fps: FPSLocker-Warehouse has no config for main build {bid[:16].upper()}: no FPSLocker config applied; built-in profile patches are unaffected'); PROG.end('no external config for this build; built-in patches unaffected'); return
+            nsp.rmtree(cache); say(f'60 fps：FPSLocker-Warehouse 没有 main 构建 {bid[:16].upper()} 的配置：未应用 FPSLocker 配置，内置补丁不受影响'); PROG.end('该构建没有外部配置；内置补丁不受影响'); return
         cache.write_text(text, encoding='utf-8')
         try: tsv, cuts = fpslocker.convert(text, img, bid, src)
-        except fpslocker.Refused as e: say(f'[RED] 60 fps: {src} cannot be applied ({e}): no FPSLocker config applied; built-in profile patches are unaffected'); PROG.end('external config not applicable; built-in patches unaffected'); return
+        except fpslocker.Refused as e: say(f'[RED] 60 fps：{src} 无法应用（{e}）：未应用 FPSLocker 配置，内置补丁不受影响'); PROG.end('外部配置不适用；内置补丁不受影响'); return
         (d / 'fpslock.tsv').write_text(tsv, encoding='utf-8', newline='\n')
         if cuts:   # code bytes: the rewriter's cuts, applied before it rewrites main (patch_nso.py DM_PATCHES_EXTRA; part of the rewrite's reuse key)
             (d / 'patches.py').write_text(fpslocker.patches_py(bid, cuts, src), encoding='utf-8', newline='\n'); self.env['DM_PATCHES_EXTRA'] = str(d / 'patches.py')
@@ -619,8 +619,8 @@ class Port:
         self.fps_env = ['DM_FPS_TARGET=60', f'DM_FPS_LOCKS={datapack.files_folder(self.package)}/fpslock.tsv', 'DM_PRESENT_INTERVAL=display']
         self.fps_files = {'fpslock.tsv': d / 'fpslock.tsv'}
         n = tsv.count('\n') - 3
-        say(f'60 fps: FPSLocker-Warehouse config {src}, by masagrator and contributors: {n} memory write(s)' + (f', {len(cuts)} code cut(s)' if cuts else ''))
-        PROG.end(f'{n} memory write(s)' + (f', {len(cuts)} code cut(s)' if cuts else ''))
+        say(f'60 fps：使用 FPSLocker-Warehouse 配置 {src}，作者 masagrator 及贡献者：{n} 处内存写入' + (f'，{len(cuts)} 处代码裁切' if cuts else ''))
+        PROG.end(f'{n} 处内存写入' + (f'，{len(cuts)} 处代码裁切' if cuts else ''))
 
     # ---- rewrite: patch_nso.py for the Android host's thread slots ----
     def rewrite(self):
@@ -630,13 +630,13 @@ class Port:
             nsp.provisional_prep(PY, NXNATIVE, self.env, self.logs, self.g)
             self.g = nsp.refine_after_rewrite(self.g, self.game, self.patched)
             if self.provisional and profile_guess.heap_check_needed(self.game / 'ExeFS') and not nsp.heap_checked(self.g):
-                say('[RED] no heap check: it boots the game in the Mac host; the provisional profile keeps its guessed heap keys')
+                say('[RED] 未做堆检查：需要在 Mac 宿主中启动游戏；临时配置将继续使用推测的堆参数')
 
     # ---- shaders: upstream's split, then SPIR-V for the Vulkan backend ----
     def shaders(self):
         if getattr(self, 'gl', False):   # an OpenGL ES game: the driver compiles its shaders on the device
             self.dmsv = None
-            for st in ('shader split', 'Vulkan shaders'): PROG.stage(st); PROG.end('none: the game renders with OpenGL ES')
+            for st in ('着色器拆分', 'Vulkan 着色器'): PROG.stage(st); PROG.end('无：该游戏使用 OpenGL ES 渲染')
             return
         sv = self.versions
         pkg = self.work / 'shader' / 'pkg'
@@ -647,22 +647,22 @@ class Port:
                                aoc=self.aoc)   # DLC with shaders of its own (Xenoblade Chronicles 3's archives)
         finally: self.device_oodle_end()
         self.dmsv = self.aw / 'shaders.dmsv'; kf = self.aw / 'shaders.dmsv.key'; cap = self.aw / 'captured_shaders'
-        PROG.stage('Vulkan shaders', step='building the translator')
+        PROG.stage('Vulkan 着色器', step='正在准备着色器编译器')
         xlate, xkey = self.translator()
-        PROG.set(step='checking the inputs')
+        PROG.set(step='正在检查输入')
         key = nsp.fingerprint(nsp.package_key(pkg), ('files', [DM / 'android/tools/shader_vk.py', DM / 'android/tools/dmsv.py'] + nsp.tool_files(NXNATIVE)), ('files', nsp.profile_files(self.g)), xkey,
                               ('files', sorted(cap.glob('*.bin'))))
         if self.dmsv.is_file() and (note := nsp.reused(kf, key)) is not None:
-            PROG.end(f'{note}, reused (inputs unchanged)'); return
+            PROG.end(f'{note}，已复用（输入未变）'); return
         tmp = self.dmsv.with_name('shaders.dmsv.partial'); nsp.rmtree(tmp); nsp.rmtree(kf)
         def line(s):
-            if m := re.match(r'(translating|compressing) (\d+) shaders', s): PROG.set(step=f'{m.group(1)} {int(m.group(2)):,} shaders')   # compressing: the bundle's SPIR-V (dmsv.py)
+            if m := re.match(r'(translating|compressing) (\d+) shaders', s): PROG.set(step=f'{"编译" if m.group(1) == "translating" else "压缩"} {int(m.group(2)):,} 个着色器')   # compressing: the bundle's SPIR-V (dmsv.py)
             elif s.startswith('[RED] this Python has no zstd'): say(s)   # the bundle then goes uncompressed: 3.5x the space on the device
         nsp.run([PY, DM / 'android/tools/shader_vk.py', pkg, tmp, '--jobs', str(self.o.jobs), '--dotnet', self.tools['dotnet'], '--xlate', xlate, '--capture', cap],
                 self.logs / 'android_shaders.log', env=self.env, on_line=line)
         m = re.search(r'^(\d+) of (\d+) shaders', (self.logs / 'android_shaders.log').read_text(errors='replace'), re.M)
-        if not m or m.group(1) == '0': raise BuildError(f'no shader translated (see {self.logs / "android_shaders.log"})')
-        note = f'{int(m.group(1)):,} of {int(m.group(2)):,} shaders, {tmp.stat().st_size / 2**20:,.0f} MB'
+        if not m or m.group(1) == '0': raise BuildError(f'没有编译出任何着色器（见 {self.logs / "android_shaders.log"}）')
+        note = f'{int(m.group(1)):,} / {int(m.group(2)):,} 个着色器，{tmp.stat().st_size / 2**20:,.0f} MB'
         nsp.swap_in(tmp, self.dmsv); kf.write_text(f'{key}\n{note}\n')
         PROG.end(note)
         for d in (self.work / 'tmp').glob('shvk_*'): nsp.rmtree(d)   # the translator's work folders
@@ -675,8 +675,8 @@ class Port:
         try:
             adb.pick()
             got = adb.pull_new(f'{datapack.files_folder(self.package)}/captured_shaders', self.aw / 'captured_shaders', pattern=lambda n: re.fullmatch(r'[0-9a-f]{16}\.bin', n))
-        except AdbError as e: say(f'shaders captured on the device not pulled ({e})'); return
-        if got: say(f'{len(got)} shader(s) missing from the bundle, captured on the device: {" ".join(n[:16] for n in got)}')
+        except AdbError as e: say(f'设备上抓取到的着色器未能取回（{e}）'); return
+        if got: say(f'{len(got)} 个着色器不在包中，已在设备上抓取：{" ".join(n[:16] for n in got)}')
 
     def translator(self):
         """The shader translator (dm/gfx/tools/dmsh_xlate over dm/third_party/ryujinx) built from the repository's source with the player's .NET SDK, once for every game,
@@ -690,18 +690,18 @@ class Port:
         if dll.is_file() and nsp.reused(kf, key) is not None: return dll, key
         tmp = out.with_name('dmsh_xlate.partial'); nsp.rmtree(tmp); nsp.rmtree(kf)
         nsp.run([self.tools['dotnet'], 'build', src, '-c', 'Release', '-o', tmp, '-nologo', '-v', 'quiet'], self.logs / 'android_translator_build.log', env=self.env)
-        if not (tmp / 'dmsh_xlate.dll').is_file(): raise BuildError(f'the translator built without dmsh_xlate.dll (see {self.logs / "android_translator_build.log"})')
+        if not (tmp / 'dmsh_xlate.dll').is_file(): raise BuildError(f'编译工具构建完成但没有生成 dmsh_xlate.dll（见 {self.logs / "android_translator_build.log"}）')
         nsp.swap_in(tmp, out); kf.write_text(f'{key}\n')
         return dll, key
 
     # ---- host: the Android host built for this profile with the player's NDK ----
     def host(self):
-        PROG.stage('host', step=f'NDK {self.tools["ndk"].name}')
+        PROG.stage('构建宿主库', step=f'NDK {self.tools["ndk"].name}')
         out = self.aw / ('host-debug' if self.o.debug else 'host')
         nsp.run([PY, DM / 'android/build.py', '--game', self.g.id, '--ndk', self.tools['ndk'], '--out', out, '--lib', '--jobs', str(self.o.jobs)] + ([] if self.o.debug else ['--release'])
                 + (['--adrenotools'] if self.o.vulkan_driver else []), self.logs / 'android_host.log', env=self.env)
         self.so = out / 'libdmhost.so'
-        if not self.so.is_file(): raise BuildError(f'build.py made no {self.so}')
+        if not self.so.is_file(): raise BuildError(f'build.py 未生成 {self.so}')
         PROG.end(f'{self.so.stat().st_size / 2**20:.1f} MB')
 
     # ---- apk: the host as a NativeActivity app, signed with the player's key ----
@@ -711,12 +711,12 @@ class Port:
         self.apk_path = self.o.out / f'{stem}.apk'; self.o.out.mkdir(parents=True, exist_ok=True)
         icon = self.icon()
         code = version_code(self.pkg_ver, self.o.vercode_offset)
-        if self.o.vercode_offset: say(f'versionCode {code} ({self.pkg_ver} + 1 + offset {self.o.vercode_offset})')
+        if self.o.vercode_offset: say(f'versionCode {code}（{self.pkg_ver} + 1 + 偏移 {self.o.vercode_offset}）')
         external = self.external_activity() if self.o.external_display else []
         driver = self.o.vulkan_driver
         if driver and driver.name != driver_lib_name(driver):   # packed under a lib*.so name (driver_lib_name), copied beside the host library
             driver = self.so.parent / driver_lib_name(driver); shutil.copyfile(self.o.vulkan_driver, driver)
-            say(f'--vulkan-driver: {self.o.vulkan_driver.name} is packed as {driver.name} (Android extracts only lib*.so libraries)')
+            say(f'--vulkan-driver：{self.o.vulkan_driver.name} 将以 {driver.name} 打包（Android 只解压 lib*.so 库）')
         nsp.run([PY, DM / 'android/apk/mkapk.py', self.so, self.apk_path, paths.signing_key(), '--package', self.package, '--label', self.app_name, '--lib', 'dmhost',
                  '--version-code', str(code), '--version-name', self.display]
                 + (['--landscape'] if self.ap.landscape else []) + icon + self.theme() + self.ui_font() + external + ([] if self.o.debug else ['--release'])
@@ -726,19 +726,22 @@ class Port:
         PROG.end(f'{self.apk_path.name}, {self.apk_path.stat().st_size / 2**20:.1f} MB')
 
     def external_activity(self):
-        javac = shutil.which('javac')
+        jdk = toolchain.find_jdk()
+        javac = jdk / 'bin' / f'javac{toolchain.EXE}' if jdk else None
         roots = toolchain._sdk_roots()
         platforms = [p for root in roots for p in (root / 'platforms').glob('android-*/android.jar')]
         d8s = [p for root in roots for p in (root / 'build-tools').glob('*/d8' + ('.bat' if os.name == 'nt' else ''))]
         def version(p): return tuple(int(x) for x in re.findall(r'\d+', p.parent.name))
         if not javac or not platforms or not d8s:
-            raise BuildError('--external-display needs javac and an Android SDK with a platform and build-tools (set ANDROID_HOME)')
+            raise BuildError('--external-display 需要 JDK 17（javac）以及带有 platform 与 build-tools 的 Android SDK（可设置 ANDROID_HOME，或把 SDK 放在 %LOCALAPPDATA%\\Android\\Sdk）')
         platform, d8 = max(platforms, key=version), max(d8s, key=version)
+        env = dict(self.env, JAVA_HOME=str(jdk))   # d8's batch file looks for java through JAVA_HOME
         out = self.aw / 'external-activity'; classes, dex = out / 'classes', out / 'dex'
         shutil.rmtree(out, ignore_errors=True); classes.mkdir(parents=True); dex.mkdir()
         sources = sorted((DM / 'android/java/org/nx2a').glob('*.java'))
-        nsp.run([javac, '-source', '8', '-target', '8', '-classpath', platform, '-d', classes, *sources], self.logs / 'android_external_java.log', env=self.env)
-        nsp.run([d8, '--min-api', '29', '--lib', platform, '--output', dex, *sorted(classes.rglob('*.class'))], self.logs / 'android_external_dex.log', env=self.env)
+        # -encoding UTF-8: the sources hold Chinese labels, and javac takes the platform's charset (GBK on a Chinese Windows) by default
+        nsp.run([javac, '-encoding', 'UTF-8', '-source', '8', '-target', '8', '-classpath', platform, '-d', classes, *sources], self.logs / 'android_external_java.log', env=env)
+        nsp.run([d8, '--min-api', '29', '--lib', platform, '--output', dex, *sorted(classes.rglob('*.class'))], self.logs / 'android_external_dex.log', env=env)
         return ['--dex', dex / 'classes.dex', '--activity', 'org.nx2a.ExternalActivity']
 
     def theme(self):
@@ -747,8 +750,8 @@ class Port:
         pack = android_profile.theme(self.g.id)
         files = [pack / 'theme.tsv'] + [pack / f'{lay}.png' for lay in android_profile.LAYOUTS]
         missing = [f.name for f in files if not f.is_file()]
-        if missing: say(f'[RED] the gamepad theme {pack.name} has no {", ".join(missing)}: the app draws its gamepad without a theme'); return []
-        self.result['theme'] = pack.name; say(f'gamepad theme: {pack.name}')
+        if missing: say(f'[RED] 手柄主题 {pack.name} 缺少 {", ".join(missing)}：应用将使用无主题的手柄'); return []
+        self.result['theme'] = pack.name; say(f'手柄主题：{pack.name}')
         return [a for f in files for a in ('--asset', f'overlay/{f.name}={f}')]
 
     def ui_font(self):
@@ -761,9 +764,9 @@ class Port:
         (Android 8+ launchers draw a plain icon small on a white disc): the icon fills the 72 dp the launcher's mask shows, over a blurred copy that fills
         the 108 dp layer. [] without Pillow or an icon"""
         src = next((d / 'icon.jpg' for d in (self.game, self.base) if (d / 'icon.jpg').exists()), None)
-        if not src: say('[RED] no game icon in the extraction: the app gets the system\'s default icon'); return []
+        if not src: say('[RED] 解压结果中没有游戏图标：应用将使用系统默认图标'); return []
         try: from PIL import Image, ImageFilter
-        except ImportError: say('[RED] no Pillow (pip install pillow): the app gets the system\'s default icon'); return []
+        except ImportError: say('[RED] 缺少 Pillow（pip install pillow）：应用将使用系统默认图标'); return []
         art = Image.open(src).convert('RGB'); plain, fg, bg = self.aw / 'icon.png', self.aw / 'icon_fg.png', self.aw / 'icon_bg.png'
         art.resize((256, 256), Image.LANCZOS).save(plain)
         layer, shown = 432, 288   # 108 dp and 72 dp at 4 px per dp
@@ -773,7 +776,7 @@ class Port:
 
     # ---- data: the files the app reads from its files folder ----
     def data(self):
-        PROG.stage('data pack', step='button-icon font')
+        PROG.stage('数据包', step='按键图标字体')
         font_env, font_files = self.button_font()
         if self.o.shared_font:   # the host serves it for every shared-font type but the button icons (hle_sdk16.c font_get)
             font_env, font_files = font_env + [f'DM_SHARED_FONT={datapack.files_folder(self.package)}/standard.ttf'], {**font_files, 'standard.ttf': self.o.shared_font}
@@ -782,9 +785,9 @@ class Port:
                              aoc=self.aoc, sysdata=self.sysdata, language=self.lang, package=self.package, env=self.fps_env + font_env + (['DM_VK_MT_REPLAY=1'] if self.o.mt_replay else [])
                              + ([f'DM_VK_DRIVER={driver_lib_name(self.o.vulkan_driver)}'] if self.o.vulkan_driver else []), settings=TOUCH_SETTINGS if self.o.touch else None,
                              files={**self.fps_files, **font_files},
-                             progress=lambda what: PROG.set(step=f'linking {what}'))
+                             progress=lambda what: PROG.set(step=f'正在链接 {what}'))
         self.data_path = dst; self.result['data'] = str(dst)
-        PROG.end(f'{man["files"]:,} files, {man["bytes"] / 2**30:.1f} GB')
+        PROG.end(f'{man["files"]:,} 个文件，{man["bytes"] / 2**30:.1f} GB')
 
     def button_font(self):
         """The stand-in for the system's Nintendo extension shared font: the controller-button icons in game text (U+E0E0 = A; Super Mario Bros. Wonder's menus showed '?' without it), which
@@ -792,9 +795,9 @@ class Port:
         Returns (env.txt rows, pack files); none without fontTools or a letter font, and the icons draw as '?'"""
         letters = next((Path(p) for p in LETTER_FONTS if Path(p).is_file()), None)
         try: import fontTools   # noqa: F401 (make_ext_font.py runs with this Python)
-        except ImportError: letters, why = None, 'no fontTools (pip install fonttools)'
-        else: why = 'no bold system font for the letters'
-        if not letters: say(f'[RED] {why}: the button icons in the game\'s text draw as "?"'); return [], {}
+        except ImportError: letters, why = None, '缺少 fontTools（pip install fonttools）'
+        else: why = '没有可用于字母的粗体系统字体'
+        if not letters: say(f'[RED] {why}：游戏文本中的按键图标将显示为“?”'); return [], {}
         d = self.aw / 'font'; ttf, kf = d / 'nintendo_ext.ttf', d / 'nintendo_ext.key'
         key = nsp.fingerprint(('files', [DM / 'tools/make_ext_font.py', letters]))
         if not (ttf.is_file() and nsp.reused(kf, key) is not None):

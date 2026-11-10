@@ -5,14 +5,16 @@ import json
 from porter.paths import user_dir
 
 KEYS = {
-    'keys': 'path of prod.keys',
-    'firmware': "folder of the console's system content files (.nca; a firmware dump's NAND SYSTEM Contents/registered), for games that read system data",
-    'ndk': 'Android NDK folder (r27c)',
-    'dotnet': 'dotnet executable (.NET SDK 10)',
-    'adb': 'adb executable (platform-tools)',
-    'out': 'folder for the APK and data pack (empty = the game folder)',
-    'device': 'adb serial of the device to install on (empty = the only one connected)',
-    'language': 'game language code (empty = English)',
+    'keys': 'prod.keys 的路径',
+    'firmware': "主机系统内容文件（.nca，即固件转储的 NAND SYSTEM Contents/registered）所在文件夹，供读取系统数据的游戏使用",
+    'ndk': 'Android NDK 文件夹（r27c）',
+    'dotnet': 'dotnet 可执行文件（.NET SDK 10）',
+    'adb': 'adb 可执行文件（platform-tools）',
+    'jdk': 'JDK 17 文件夹（仅接电视的 --external-display 需要：用它编译手机手柄界面）',
+    'out': 'APK 与数据包的输出文件夹（留空即游戏文件夹）',
+    'library': '已移植游戏的文件夹（“推送”页面扫描它，留空即当前目录）',
+    'device': '要安装到的设备的 adb 序列号（留空即唯一连接的设备）',
+    'language': '游戏语言代码（留空即英语）',
 }
 
 
@@ -32,5 +34,5 @@ def save(c):
 
 
 def set_value(key, value):
-    if key not in KEYS: raise KeyError(f'unknown setting {key!r}: one of {", ".join(KEYS)}')
+    if key not in KEYS: raise KeyError(f'未知的设置项 {key!r}：可选 {", ".join(KEYS)}')
     c = load(); c[key] = value; save(c)

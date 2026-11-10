@@ -2,12 +2,32 @@
 import os
 import pathlib
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
 import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+
+def jdk_bin():
+    """The JDK's bin (javac, java): the tool's own search, else where an installer puts one (a test run isolates the config, so a saved jdk
+    path is not seen); None without a JDK"""
+    from porter import toolchain
+    jdk = toolchain.find_jdk()
+    if jdk: return jdk / 'bin'
+    for r in (os.environ.get('ProgramFiles'), os.environ.get('ProgramW6432'), 'C:/Program Files', 'D:/Program Files'):
+        if not r: continue
+        for d in sorted(pathlib.Path(r).glob('jdk*')):
+            if (d / 'bin' / ('javac.exe' if os.name == 'nt' else 'javac')).is_file(): return d / 'bin'
+    return None
+
+
+def exe(bin_, name):
+    """bin/javac, bin/java on this platform"""
+    return str(bin_ / (name + ('.exe' if os.name == 'nt' else '')))
 SOURCE = ROOT / 'nxnative/dm/android/java/org/nx2a/ExternalDisplay.java'
 STUBS = {
     'android/content/Context.java': '''package android.content; public class Context { public static final String DISPLAY_SERVICE="display"; public Object getSystemService(String name) { return null; } }''',
@@ -43,14 +63,17 @@ class ExternalDisplayTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             root = pathlib.Path(t); platform = root / 'platforms/android-36/android.jar'; platform.parent.mkdir(parents=True); platform.touch()
             d8 = root / 'build-tools/36.0.0' / ('d8.bat' if os.name == 'nt' else 'd8'); d8.parent.mkdir(parents=True); d8.touch()   # what external_activity looks for
+            jdk = root / 'jdk'; (jdk / 'bin').mkdir(parents=True); pathlib.Path(exe(jdk / 'bin', 'javac')).touch()
             port = pipeline.Port(pipeline.Options(folder=root, external_display=True)); port.aw = root / 'out'; port.logs = root / 'logs'; port.env = {}
-            with mock.patch.object(pipeline.toolchain, '_sdk_roots', return_value=[root]), mock.patch.object(pipeline.shutil, 'which', return_value='/usr/bin/javac'), mock.patch.object(pipeline.nsp, 'run') as run:
+            with mock.patch.object(pipeline.toolchain, '_sdk_roots', return_value=[root]), mock.patch.object(pipeline.toolchain, 'find_jdk', return_value=jdk), mock.patch.object(pipeline.nsp, 'run') as run:
                 args = port.external_activity()
             self.assertEqual(run.call_count, 2)
             self.assertEqual(args[-1], 'org.nx2a.ExternalActivity')
             self.assertEqual(args[0], '--dex')
 
     def test_attach_detach_and_stale_surface(self):
+        bin_ = jdk_bin()
+        if not bin_: self.skipTest('需要 JDK（javac / java）')
         with tempfile.TemporaryDirectory() as t:
             root = pathlib.Path(t)
             paths = []
@@ -59,8 +82,8 @@ class ExternalDisplayTest(unittest.TestCase):
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text(source)
                 paths.append(str(p))
-            subprocess.run(['javac', '-d', str(root), str(SOURCE), *paths], check=True)
-            subprocess.run(['java', '-cp', str(root), 'Check'], check=True)
+            subprocess.run([exe(bin_, 'javac'), '-d', str(root), str(SOURCE), *paths], check=True)
+            subprocess.run([exe(bin_, 'java'), '-cp', str(root), 'Check'], check=True)
 
     def test_optional_activity_is_packaged_without_changing_default(self):
         with tempfile.TemporaryDirectory() as t:
